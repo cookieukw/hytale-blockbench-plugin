@@ -1,4 +1,6 @@
-export function setupElements(): Deletable[] {
+import { track } from "./cleanup";
+
+export function setupElements() {
 	let property_shading_mode = new Property(Cube, 'enum', 'shading_mode', {
 		default: 'flat',
 		values: ['flat', 'standard', 'fullbright', 'reflective'],
@@ -16,6 +18,7 @@ export function setupElements(): Deletable[] {
 			}
 		}
 	});
+	track(property_shading_mode);
 	let property_double_sided = new Property(Cube, 'boolean', 'double_sided', {
 		condition: () => Format.id == 'hytale_model',
 		inputs: {
@@ -27,8 +30,5 @@ export function setupElements(): Deletable[] {
 			}
 		}
 	});
-	return [
-		property_double_sided,
-		property_shading_mode,
-	]
+	track(property_double_sided);
 };

@@ -1,3 +1,4 @@
+import { parseAnimationFile } from "./animation"
 import { track } from "./cleanup"
 
 type BlockymodelJSON = {
@@ -54,7 +55,7 @@ export function setupBlockymodelCodec(): Codec {
 				return autoStringify(model);
 			}
 		},
-		parse(model: BlockymodelJSON, path: string, options?) {
+		parse(model: BlockymodelJSON, path: string, options?: any) {
 			function parseVector(vec: IVector, fallback: ArrayVector3 = [0, 0, 0]): ArrayVector3 | undefined {
 				if (!vec) return fallback;
 				return Object.values(vec).slice(0, 3) as ArrayVector3;
@@ -152,6 +153,22 @@ export function setupBlockymodelCodec(): Codec {
 							}
 						}
 					}
+					enum HytaleDirection {
+						back = "back",
+						front = "front",
+						left = "left",
+						right = "right",
+						top = "top",
+						bottom = "bottom",
+					}
+					const HytaleToBBDirection = {
+						back: "north",
+						front: "south",
+						left: "west",
+						right: "east",
+						top: "up",
+						bottom: "down",
+					}
 
 					// UV
 					if (node.shape.settings.size) {
@@ -159,8 +176,14 @@ export function setupBlockymodelCodec(): Codec {
 							if (!vec) return fallback;
 							return Object.values(vec).slice(0, 2) as ArrayVector2;
 						}
-						for (let key in node.shape.textureLayout) {
+						for (let key in HytaleDirection) {
 							let uv_source = node.shape.textureLayout[key];
+							let face_name = HytaleToBBDirection[key];
+							if (!uv_source) {
+								cube.faces[face_name].texture = null;
+								cube.faces[face_name].uv = [0, 0, 0, 0];
+								continue;
+							}
 							let uv_offset = parseUVVector(uv_source.offset) as ArrayVector2;
 							let uv_size = [
 								size[0],
@@ -171,34 +194,21 @@ export function setupBlockymodelCodec(): Codec {
 								uv_source.mirror.y ? -1 : 1,
 							] as ArrayVector2;
 							let uv_rotation = uv_source.angle;
-							let face_name;
 
 							switch (key) {
-								case 'back': {
-									face_name = 'north';
-									break;
-								}
-								case 'front': {
-									face_name = 'south';
-									break;
-								}
 								case 'left': {
-									face_name = 'west';
 									uv_size[0] = size[2];
 									break;
 								}
 								case 'right': {
-									face_name = 'east';
 									uv_size[0] = size[2];
 									break;
 								}
 								case 'top': {
-									face_name = 'up';
 									uv_size[1] = size[2];
 									break;
 								}
 								case 'bottom': {
-									face_name = 'down';
 									uv_size[1] = size[2];
 									break;
 								}
@@ -270,6 +280,45 @@ export function setupBlockymodelCodec(): Codec {
 					attachment_node = Group.all.find(g => g.name == node.name);
 				}
 				parseNode(node, null, attachment_node);
+			}
+
+			if (path) {
+				let parts = path.split(/[\\\/]/);
+				parts[parts.length-1] = parts.last().split('.')[0];
+				Project.name = parts.findLast(p => p != 'Model' && p != 'Models' && p != 'Attachments') ?? 'Model';
+			}
+			
+			if (isApp && path) {
+				let dirname = PathModule.dirname(path);
+				let fs = requireNativeModule('fs', {scope: PathModule.resolve(dirname, '..')});
+
+				let texture_files = fs.readdirSync(dirname);
+				for (let file_name of texture_files) {
+					if (file_name.match(/\.png$/i)) {
+						new Texture().fromPath(PathModule.join(dirname, file_name)).add(false, true);
+					}
+				}
+				let listener = Blockbench.on('select_mode', ({mode}) => {
+					if (mode.id != 'animate') return;
+					listener.delete();
+					try {
+						let anim_folders = fs.readdirSync(PathModule.resolve(dirname, '../Animations/'));
+						for (let folder of anim_folders) {
+							let path = PathModule.resolve(dirname, '../Animations/', folder);
+							let anim_files = fs.readdirSync(path);
+							for (let file_name of anim_files) {
+								if (file_name.match(/\.blockyanim$/i)) {
+									let file_path = PathModule.resolve(path, file_name);
+									let content = fs.readFileSync(file_path, 'utf-8');
+									let json = autoParseJSON(content);
+									parseAnimationFile({name: file_name, path: file_path}, json)
+								}
+							}
+						}
+					} catch (err) {
+						console.error(err);
+					}
+				});
 			}
 		}
 	})

@@ -3,6 +3,12 @@ import { setupBlockymodelCodec } from "./blockymodel";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
 
+const HytaleAnglePreset: AnglePreset = {
+    projection: 'perspective',
+    position: [112, 80, 112],
+    target: [0, 32, 0],
+}
+
 BBPlugin.register('hytale_plugin', {
     title: 'Test Plugin',
     author: 'JannisX11',
@@ -22,6 +28,8 @@ BBPlugin.register('hytale_plugin', {
             description: 'Test Format',
             icon: 'icon-format_hytale',
             category: 'hytale',
+            single_texture_default: true,
+            per_group_texture: true,
             animation_files: true,
             animation_mode: true,
             bone_rig: true,
@@ -36,6 +44,9 @@ BBPlugin.register('hytale_plugin', {
             animation_loop_wrapping: true,
             quaternion_interpolation: true,
             codec,
+            onActivation() {
+                settings.shading.set(false);
+            }
         });
         codec.format = format;
         track(format);
@@ -43,8 +54,15 @@ BBPlugin.register('hytale_plugin', {
             'format_category.hytale': 'Hytale'
         })
 
-        track(...setupElements());
-        track(...setupAnimationActions());
+        setupElements();
+        setupAnimationActions();
+
+        
+		Blockbench.on('load_editor_state', ({project}) => {
+            if (Format == format && project && !project.previews[Preview.selected.id]) {
+                Preview.selected.loadAnglePreset(HytaleAnglePreset);
+            }
+        });
         
     },
     onunload() {

@@ -1,3 +1,5 @@
+import { track } from "./cleanup";
+
 const FPS = 60;
 // @ts-expect-error
 const Animation = window.Animation as typeof _Animation;
@@ -21,7 +23,7 @@ interface IKeyframe {
 	interpolationType: 'smooth' | 'linear'
 }
 
-function parseAnimationFile(file: Filesystem.FileResult, content: IBlockyAnimJSON) {
+export function parseAnimationFile(file: Filesystem.FileResult, content: IBlockyAnimJSON) {
 	let animation = new Animation({
 		name: pathToName(file.name, false),
 		length: content.duration / FPS,
@@ -120,7 +122,7 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 	return file;
 }
 
-export function setupAnimationActions(): Action[] {
+export function setupAnimationActions() {
 	let import_anim = new Action('import_blockyanim', {
 		name: 'Import Blockyanim',
 		condition: {formats: ['hytale_model']},
@@ -138,6 +140,7 @@ export function setupAnimationActions(): Action[] {
 			})
 		}
 	})
+	track(import_anim);
 	let export_anim = new Action('export_blockyanim', {
 		name: 'Export Blockyanim',
 		condition: {formats: ['hytale_model']},
@@ -155,5 +158,5 @@ export function setupAnimationActions(): Action[] {
 			})
 		}
 	})
-	return [import_anim, export_anim];
+	track(export_anim);
 }
