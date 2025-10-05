@@ -1,4 +1,5 @@
 import { setupAnimationActions } from "./animation";
+import { setupAttachments } from "./attachments";
 import { setupBlockymodelCodec } from "./blockymodel";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
@@ -29,7 +30,6 @@ BBPlugin.register('hytale_plugin', {
             icon: 'icon-format_hytale',
             category: 'hytale',
             single_texture_default: true,
-            per_group_texture: true,
             animation_files: true,
             animation_mode: true,
             bone_rig: true,
@@ -46,6 +46,7 @@ BBPlugin.register('hytale_plugin', {
             codec,
             onActivation() {
                 settings.shading.set(false);
+                Panels.animations.inside_vue.$data.group_animations_by_file = false;
             }
         });
         codec.format = format;
@@ -56,6 +57,7 @@ BBPlugin.register('hytale_plugin', {
 
         setupElements();
         setupAnimationActions();
+        setupAttachments();
 
         
 		Blockbench.on('load_editor_state', ({project}) => {

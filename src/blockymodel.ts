@@ -55,11 +55,12 @@ export function setupBlockymodelCodec(): Codec {
 				return autoStringify(model);
 			}
 		},
-		parse(model: BlockymodelJSON, path: string, options?: any) {
+		parse(model: BlockymodelJSON, path: string, args?: {attachment?: boolean}) {
 			function parseVector(vec: IVector, fallback: ArrayVector3 = [0, 0, 0]): ArrayVector3 | undefined {
 				if (!vec) return fallback;
 				return Object.values(vec).slice(0, 3) as ArrayVector3;
 			}
+			const new_groups: Group[] = [];
 			function parseNode(node: BlockymodelNode, parent_node: BlockymodelNode | null, parent_group: Group | 'root' = 'root', parent_offset?: ArrayVector3) {
 
 				let quaternion = new THREE.Quaternion();
@@ -78,6 +79,7 @@ export function setupBlockymodelCodec(): Codec {
 						Math.radToDeg(rotation.z),
 					]
 				});
+				new_groups.push(group);
 				group.addTo(parent_group);
 
 				if (parent_group instanceof Group) {
@@ -276,18 +278,19 @@ export function setupBlockymodelCodec(): Codec {
 			for (let node of model.nodes) {
 				// Roots
 				let attachment_node: Group | undefined;
-				if (node.shape?.type == 'none' && Group.all.length) {
+				if (args.attachment && node.shape?.type == 'none' && Group.all.length) {
 					attachment_node = Group.all.find(g => g.name == node.name);
 				}
 				parseNode(node, null, attachment_node);
 			}
 
-			if (path) {
+			if (path && !args?.attachment) {
 				let parts = path.split(/[\\\/]/);
 				parts[parts.length-1] = parts.last().split('.')[0];
 				Project.name = parts.findLast(p => p != 'Model' && p != 'Models' && p != 'Attachments') ?? 'Model';
 			}
 			
+			const new_textures: Texture[] = [];
 			if (isApp && path) {
 				let dirname = PathModule.dirname(path);
 				let fs = requireNativeModule('fs', {scope: PathModule.resolve(dirname, '..')});
@@ -295,31 +298,35 @@ export function setupBlockymodelCodec(): Codec {
 				let texture_files = fs.readdirSync(dirname);
 				for (let file_name of texture_files) {
 					if (file_name.match(/\.png$/i)) {
-						new Texture().fromPath(PathModule.join(dirname, file_name)).add(false, true);
+						let texture = new Texture().fromPath(PathModule.join(dirname, file_name)).add(false, true);
+						new_textures.push(texture);
 					}
 				}
-				let listener = Blockbench.on('select_mode', ({mode}) => {
-					if (mode.id != 'animate') return;
-					listener.delete();
-					try {
-						let anim_folders = fs.readdirSync(PathModule.resolve(dirname, '../Animations/'));
-						for (let folder of anim_folders) {
-							let path = PathModule.resolve(dirname, '../Animations/', folder);
-							let anim_files = fs.readdirSync(path);
-							for (let file_name of anim_files) {
-								if (file_name.match(/\.blockyanim$/i)) {
-									let file_path = PathModule.resolve(path, file_name);
-									let content = fs.readFileSync(file_path, 'utf-8');
-									let json = autoParseJSON(content);
-									parseAnimationFile({name: file_name, path: file_path}, json)
+				if (!args?.attachment) {
+					let listener = Blockbench.on('select_mode', ({mode}) => {
+						if (mode.id != 'animate') return;
+						listener.delete();
+						try {
+							let anim_folders = fs.readdirSync(PathModule.resolve(dirname, '../Animations/'));
+							for (let folder of anim_folders) {
+								let path = PathModule.resolve(dirname, '../Animations/', folder);
+								let anim_files = fs.readdirSync(path);
+								for (let file_name of anim_files) {
+									if (file_name.match(/\.blockyanim$/i)) {
+										let file_path = PathModule.resolve(path, file_name);
+										let content = fs.readFileSync(file_path, 'utf-8');
+										let json = autoParseJSON(content);
+										parseAnimationFile({name: file_name, path: file_path}, json)
+									}
 								}
 							}
+						} catch (err) {
+							console.error(err);
 						}
-					} catch (err) {
-						console.error(err);
-					}
-				});
+					});
+				}
 			}
+			return {new_groups, new_textures};
 		}
 	})
 	let export_action = new Action('export_optifine_part', {
