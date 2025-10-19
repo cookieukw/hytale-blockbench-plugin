@@ -40,13 +40,19 @@ type BlockymodelNode = {
 	}
 	children?: BlockymodelNode[]
 }
+type IUvRot = 0 | 90 | 180 | 270;
 type IUvFace = {
 	offset: {x: number, y: number}
 	mirror: {x: boolean, y: boolean}
-	angle: 0 | 90 | 180 | 270
+	angle: IUvRot
 }
 type IVector = {x: number, y: number, z: number}
 type IQuaternion = {x: number, y: number, z: number, w: number}
+
+type CubeHytale = Cube & {
+	shading_mode: 'flat' |'standard' |'fullbright' |'reflective'
+	double_sided: boolean
+}
 
 interface CompileOptions {
 	attachment?: UUID,
@@ -67,7 +73,7 @@ export function setupBlockymodelCodec(): Codec {
 				nodes: [],
 				lod: 'auto'
 			}
-			let id_count = 1;
+			let node_id = 1;
 			const attach_collection = options.attachment && Collection.all.find(c => c.uuid == options.attachment);
 
 			let formatVector = (input: ArrayVector3) => {
@@ -83,18 +89,20 @@ export function setupBlockymodelCodec(): Codec {
 				if child cube
 			*/
 
-			function cubeIsQuad(cube: Cube) {
+			function qualifiesAsMainShape(object: OutlinerNode): boolean {
+				return object instanceof Cube && (object.rotation.allEqual(0) || cubeIsQuad(object as CubeHytale));
+			}
+			function cubeIsQuad(cube: CubeHytale): boolean {
 				return cube.size()[2] == 0;
 			}
-			function turnNodeIntoBox(node: BlockymodelNode, cube: Cube, original_element: Cube | Group) {
+			function turnNodeIntoBox(node: BlockymodelNode, cube: CubeHytale, original_element: CubeHytale | Group) {
 				let size = cube.size();
 				let stretch = cube.stretch.slice() as ArrayVector3;
 				let offset: ArrayVector3 = [
-					-(cube.origin[0] - Math.lerp(cube.from[0], cube.to[0], 0.5)),
-					-(cube.origin[1] - Math.lerp(cube.from[1], cube.to[1], 0.5)),
-					-(cube.origin[2] - Math.lerp(cube.from[2], cube.to[2], 0.5)),
+					Math.lerp(cube.from[0], cube.to[0], 0.5) - original_element.origin[0],
+					Math.lerp(cube.from[1], cube.to[1], 0.5) - original_element.origin[1],
+					Math.lerp(cube.from[2], cube.to[2], 0.5) - original_element.origin[2],
 				];
-				if (node.name == "belly") console.log('X', offset[0], cube.origin[1], Math.lerp(cube.from[1], cube.to[1], 0.5))
 				node.shape.type = 'box';
 				node.shape.settings.size = formatVector(size);
 				node.shape.offset = formatVector(offset);
@@ -129,6 +137,11 @@ export function setupBlockymodelCodec(): Codec {
 				}
 				node.shape.stretch = formatVector(stretch);
 
+				node.shape.visible = true;
+				node.shape.doubleSided = cube.double_sided == true;
+				node.shape.shadingMode = cube.shading_mode;
+				node.shape.unwrapMode = 'custom';
+
 				if (cube == original_element) {
 					node.shape.settings.isStaticBox = true;
 				}
@@ -147,17 +160,85 @@ export function setupBlockymodelCodec(): Codec {
 					let face = cube.faces[fkey];
 					if (face.texture == null) continue;
 					let direction = BBToHytaleDirection[fkey];
-					let uv_offset = [face.uv[0], face.uv[1]];
 
+
+					let flip_x = false;
+					let flip_y = false;
+					let uv_x = Math.min(face.uv[0], face.uv[2]);
+					let uv_y = Math.min(face.uv[1], face.uv[3]);
+					enum UVAxis {X, Y}
+					function flipMinMax(axis: UVAxis) {
+						if (axis == UVAxis.X) {
+							flip_x = !flip_x;
+							if (flip_x) {
+								uv_x = Math.max(face.uv[0], face.uv[2]);
+							} else {
+								uv_x = Math.min(face.uv[0], face.uv[2]);
+							}
+						} else {
+							flip_y = !flip_y;
+							if (flip_y) {
+								uv_y = Math.max(face.uv[1], face.uv[3]);
+							} else {
+								uv_y = Math.min(face.uv[1], face.uv[3]);
+							}
+						}
+					}
+
+					let mirror_x = false;
+					let mirror_y = false;
+					if (face.uv[0] > face.uv[2]) {
+						mirror_x = true;
+						flipMinMax(UVAxis.X);
+					}
+					if (face.uv[1] > face.uv[3]) {
+						mirror_y = true;
+						flipMinMax(UVAxis.Y);
+					}
+
+					let uv_rot: IUvRot = 0;
+
+					switch (face.rotation) {
+						case 90: {
+							uv_rot = 270;
+							if ((mirror_x || mirror_y) && !(mirror_x && mirror_y)) {
+								uv_rot = 90;
+							}
+							flipMinMax(UVAxis.Y);
+							break;
+						}
+						case 180: {
+							uv_rot = 180;
+							flipMinMax(UVAxis.Y);
+							flipMinMax(UVAxis.X);
+							break;
+						}
+						case 270: {
+							uv_rot = 90;
+							if ((mirror_x || mirror_y) && !(mirror_x && mirror_y)) {
+								uv_rot = 270;
+							}
+							flipMinMax(UVAxis.X);
+							break;
+						}
+					}
 
 					let layout_face: IUvFace = {
-						offset: new oneLiner({x: uv_offset[0], y: uv_offset[1]}),
-						angle: face.rotation,
-						mirror: new oneLiner({x: false, y: false})
+						offset: new oneLiner({x: Math.trunc(uv_x), y: Math.trunc(uv_y)}),
+						mirror: new oneLiner({x: mirror_x, y: mirror_y}),
+						angle: uv_rot,
 					};
 					node.shape.textureLayout[direction] = layout_face;
 				}
 
+			}
+			function getNodeOffset(group: Group): ArrayVector3 | undefined {
+				let cube = group.children.find(qualifiesAsMainShape) as CubeHytale | undefined;
+				if (cube) {
+					let center_pos = cube.from.slice().V3_add(cube.to).V3_divide(2, 2, 2);
+					center_pos.V3_subtract(group.origin);
+					return center_pos;
+				}
 			}
 
 			function compileNode(element: Group | Cube): BlockymodelNode | undefined {
@@ -187,10 +268,13 @@ export function setupBlockymodelCodec(): Codec {
 				let origin = element.origin.slice() as ArrayVector3;
 				if (element.parent instanceof Group) {
 					origin.V3_subtract(element.parent.origin);
-					console.log(element.name, origin, element.parent.origin, element.origin.slice())
+					let offset = getNodeOffset(element.parent);
+					if (offset) {
+						origin.V3_subtract(offset);
+					}
 				}
 				let node: BlockymodelNode = {
-					id: id_count.toString(),
+					id: node_id.toString(),
 					name: element.name,
 					position: formatVector(origin),
 					orientation,
@@ -208,16 +292,16 @@ export function setupBlockymodelCodec(): Codec {
 						shadingMode: "flat"
 					},
 				}
-				id_count++;
+				node_id++;
 
 				if (element instanceof Cube) {
-					turnNodeIntoBox(node, element, element);
+					turnNodeIntoBox(node, element as CubeHytale, element as CubeHytale);
 				} else if ('children' in element) {
 					let shape_count = 0;
 					for (let child of element.children ?? []) {
 						let result: BlockymodelNode;
-						if (child instanceof Cube && shape_count == 0) {
-							turnNodeIntoBox(node, child, element);
+						if (qualifiesAsMainShape(child) && shape_count == 0) {
+							turnNodeIntoBox(node, child as CubeHytale, element);
 							shape_count++;
 
 						} else if (child instanceof Cube) {
@@ -248,7 +332,7 @@ export function setupBlockymodelCodec(): Codec {
 				})
 			}
 		},
-		parse(model: BlockymodelJSON, path: string, args?: {attachment?: string}) {
+		parse(model: BlockymodelJSON, path: string, args: {attachment?: string} = {}) {
 			function parseVector(vec: IVector, fallback: ArrayVector3 = [0, 0, 0]): ArrayVector3 | undefined {
 				if (!vec) return fallback;
 				return Object.values(vec).slice(0, 3) as ArrayVector3;
@@ -258,37 +342,41 @@ export function setupBlockymodelCodec(): Codec {
 
 				let quaternion = new THREE.Quaternion();
 				quaternion.set(node.orientation.x, node.orientation.y, node.orientation.z, node.orientation.w);
-				let rotation = new THREE.Euler().setFromQuaternion(quaternion.normalize(), 'ZYX');
+				let rotation_euler = new THREE.Euler().setFromQuaternion(quaternion.normalize(), 'ZYX');
 				let name = node.name;
-				let offset = parseVector(node.shape.offset);
-				let position = parseVector(node.position);				
-
-				let group = new Group({
-					name,
-					origin: position,
-					rotation: [
-						Math.radToDeg(rotation.x),
-						Math.radToDeg(rotation.y),
-						Math.radToDeg(rotation.z),
-					]
-				});
-				new_groups.push(group);
-				group.addTo(parent_group);
-
-				if (!parent_node && args.attachment) {
-					group.name = args.attachment + ':' + group.name,
-					group.origin = group.origin;
-					console.log(parent_group)
-
-				}
+				let offset = node.shape?.offset ? parseVector(node.shape?.offset) : [0, 0, 0];
+				let origin = parseVector(node.position);
+				let rotation: ArrayVector3 = [
+					Math.radToDeg(rotation_euler.x),
+					Math.radToDeg(rotation_euler.y),
+					Math.radToDeg(rotation_euler.z),
+				];
+				
 				if (parent_group instanceof Group) {
 					let parent_geo_origin = parent_group.children.find(cube => cube instanceof Cube)?.origin ?? parent_group.origin;
 					if (parent_geo_origin) {
-						group.origin.V3_add(parent_geo_origin);
-						if (parent_offset) group.origin.V3_add(parent_offset);
+						origin.V3_add(parent_geo_origin);
+						if (parent_offset) origin.V3_add(parent_offset);
 					}
 				}
-				group.init();
+
+				let group: Group | null = null;
+				if (!node.shape?.settings?.isStaticBox) {
+					group = new Group({
+						name,
+						origin,
+						rotation,
+					});
+					
+					new_groups.push(group);
+					group.addTo(parent_group);
+
+					if (!parent_node && args.attachment) {
+						group.name = args.attachment + ':' + group.name
+					}
+
+					group.init();
+				}
 
 
 				if (node.shape.type != 'none') {
@@ -303,21 +391,28 @@ export function setupBlockymodelCodec(): Codec {
 						rotation: [0, 0, 0],
 						stretch,
 						from: [
-							-size[0]/2 + group.origin[0] + offset[0],
-							-size[1]/2 + group.origin[1] + offset[1],
-							-size[2]/2 + group.origin[2] + offset[2],
+							-size[0]/2 + origin[0] + offset[0],
+							-size[1]/2 + origin[1] + offset[1],
+							-size[2]/2 + origin[2] + offset[2],
 						],
 						to: [
-							size[0]/2 + group.origin[0] + offset[0],
-							size[1]/2 + group.origin[1] + offset[1],
-							size[2]/2 + group.origin[2] + offset[2],
+							size[0]/2 + origin[0] + offset[0],
+							size[1]/2 + origin[1] + offset[1],
+							size[2]/2 + origin[2] + offset[2],
 						]
 					})
-					cube.origin.V3_set(
-						Math.lerp(cube.from[0], cube.to[0], 0.5),
-						Math.lerp(cube.from[1], cube.to[1], 0.5),
-						Math.lerp(cube.from[2], cube.to[2], 0.5),
-					)
+					if (group) {
+						cube.origin.V3_set(
+							Math.lerp(cube.from[0], cube.to[0], 0.5),
+							Math.lerp(cube.from[1], cube.to[1], 0.5),
+							Math.lerp(cube.from[2], cube.to[2], 0.5),
+						)
+					} else {
+						cube.extend({
+							origin,
+							rotation,
+						})
+					}
 
 					let temp: number;
 					function switchIndices(arr: ArrayVector3 | ArrayVector2, i1: number, i2: number) {
@@ -466,11 +561,13 @@ export function setupBlockymodelCodec(): Codec {
 						}
 					}
 
-					cube.addTo(group).init();
+					cube.addTo(group || parent_group).init();
 				}
 
-				for (let child of node.children ?? []) {
-					parseNode(child, node, group);
+				if (node.children?.length && group instanceof Group) {
+					for (let child of node.children) {
+						parseNode(child, node, group);
+					}
 				}
 			}
 
