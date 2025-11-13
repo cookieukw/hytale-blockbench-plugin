@@ -38,6 +38,7 @@ BBPlugin.register('hytale_plugin', {
                     }
                 ]
             },
+            block_size: 32,
             single_texture_default: true,
             animation_files: true,
             animation_mode: true,
