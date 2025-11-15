@@ -103,14 +103,16 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 		let animator = animation.animators[uuid];
 		if (!animator.group) continue;
 		let name = animator.name;
-		let node_data = {};
+		let node_data: IAnimationObject = {};
 		let has_data = false;
 
 		for (let channel in channels) {
 			let timeline: IKeyframe[];
 			let hytale_channel_key = channels[channel];
 			timeline = timeline = node_data[hytale_channel_key] = [];
-			for (let kf of animator[channel] as _Keyframe[]) {
+			let keyframe_list = (animator[channel].slice() as _Keyframe[]);
+			keyframe_list.sort((a, b) => a.time - b.time);
+			for (let kf of keyframe_list) {
 				let data_point = kf.data_points[0];
 				let delta: any = {
 					x: parseFloat(data_point.x),
@@ -143,6 +145,8 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 			}
 		}
 		if (has_data) {
+			node_data.shapeUvOffset = [];
+			node_data.shapeVisible = [];
 			nodeAnimations[name] = node_data;
 		}
 	}
