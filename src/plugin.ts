@@ -20,6 +20,7 @@ BBPlugin.register('hytale_plugin', {
     min_version: '5.0.0',
     has_changelog: true,
     repository: 'https://github.com/JannisX11/hytale-blockbench-plugin',
+    bug_tracker: 'https://github.com/JannisX11/hytale-blockbench-plugin/issues',
     onload() {
 
         let codec = setupBlockymodelCodec();
@@ -76,6 +77,14 @@ BBPlugin.register('hytale_plugin', {
                 Preview.selected.loadAnglePreset(HytaleAnglePreset);
             }
         });
+
+        let on_finish_edit = Blockbench.on('generate_texture_template', (arg) => {
+            for (let element of arg.elements) {
+                if (typeof element.autouv != 'number') continue;
+                element.autouv = 1;
+            }
+        })
+        track(on_finish_edit);
         
     },
     onunload() {

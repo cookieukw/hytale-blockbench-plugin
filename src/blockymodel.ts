@@ -362,6 +362,7 @@ export function setupBlockymodelCodec(): Codec {
 				if (!node.shape?.settings?.isStaticBox) {
 					group = new Group({
 						name,
+						autouv: 1,
 						origin,
 						rotation,
 					});
@@ -386,6 +387,7 @@ export function setupBlockymodelCodec(): Codec {
 
 					let cube = new Cube({
 						name,
+						autouv: 1,
 						rotation: [0, 0, 0],
 						stretch,
 						from: [
