@@ -1,6 +1,7 @@
-import { setupAnimationActions } from "./animation";
+import { setupAnimationCodec } from "./blockyanim";
 import { setupAttachments } from "./attachments";
 import { setupBlockymodelCodec } from "./blockymodel";
+import { setupAnimation } from "./animations";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
 // @ts-expect-error
@@ -70,7 +71,8 @@ BBPlugin.register('hytale_plugin', {
         })
 
         setupElements();
-        setupAnimationActions();
+        setupAnimation();
+        setupAnimationCodec();
         setupAttachments();
 
         
