@@ -8,7 +8,6 @@ export function setupAnimation() {
     function displayVisibility(animator: BoneAnimator) {
         let group = animator.getGroup();
         let scene_object = group.scene_object;
-        console.log(group.name)
         if (animator.muted.visibility) {
             scene_object.visible = group.visibility;
             return;
@@ -33,6 +32,7 @@ export function setupAnimation() {
         mutable: true,
         transform: false,
         max_data_points: 1,
+        condition: {formats: [Config.format_id]},
         displayFrame(animator: BoneAnimator, multiplier: number) {
             displayVisibility(animator);
         }
@@ -67,7 +67,7 @@ export function setupAnimation() {
 
         return numerator / denominator;
     }
-    Blockbench.on('interpolate_keyframes', arg => {
+    let on_interpolate = Blockbench.on('interpolate_keyframes', arg => {
         if (Format.id != Config.format_id) return;
         if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
         if (arg.keyframe_before.interpolation != 'catmullrom' || arg.keyframe_after.interpolation != 'catmullrom') return;
@@ -75,4 +75,5 @@ export function setupAnimation() {
             t: weightedCubicBezier(arg.t)
         }
     });
+    track(on_interpolate);
 }
