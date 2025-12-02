@@ -3,6 +3,7 @@ import { setupAttachments } from "./attachments";
 import { setupBlockymodelCodec } from "./blockymodel";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
+import { setupChecks } from "./validation";
 // @ts-expect-error
 import Package from './../package.json'
 
@@ -35,6 +36,10 @@ BBPlugin.register('hytale_plugin', {
             target: 'Hytale',
             format_page: {
                 content: [
+                    {type: 'h3', text: tl('mode.start.format.informations')},
+                    {text: `* One texture can be applied to a model at a time
+                            * Models can have a maximum of 255 nodes`.replace(/(\t| {4,4})+/g, '')
+                    },
                     {type: 'h3', text: tl('mode.start.format.resources')},
                     {text: ['* [Modeling Tutorial](https://hytale.com/)',
                             '* [Animation Tutorial](https://hytale.com/)'].join('\n')
@@ -72,6 +77,7 @@ BBPlugin.register('hytale_plugin', {
         setupElements();
         setupAnimationActions();
         setupAttachments();
+        setupChecks();
 
         
 		Blockbench.on('load_editor_state', ({project}) => {
