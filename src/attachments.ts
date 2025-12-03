@@ -84,6 +84,33 @@ export function setupAttachments() {
 		}
 	});
 
+	let reload_attachment_action = new Action('reload_hytale_attachment', {
+		name: 'Reload Attachment',
+		icon: 'refresh',
+		condition: () => Collection.selected.length && Modes.edit,
+		click() {
+			for (let collection of Collection.selected) {
+				for (let child of Collection.selected[0].getChildren()) {
+					child.remove();
+				}
+
+				Filesystem.readFile([collection.export_path], {}, ([file]) => {
+					let json = autoParseJSON(file.content as string);
+					let content: any = Codecs.blockymodel.parse(json, file.path, {attachment: collection.name});
+
+					let new_groups = content.new_groups as Group[];
+					let root_groups = new_groups.filter(group => !new_groups.includes(group.parent as Group));
+
+					collection.extend({
+						children: root_groups.map(g => g.uuid),
+					}).add();
+
+					Canvas.updateAllFaces();
+				})
+			}
+		}
+	})
+	Collection.menu.addAction(reload_attachment_action, 10);
 	let assign_texture: CustomMenuItem = {
 		id: 'set_texture',
 		name: 'menu.cube.texture',

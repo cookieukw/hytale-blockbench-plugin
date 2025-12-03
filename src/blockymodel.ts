@@ -58,7 +58,7 @@ type CubeHytale = Cube & {
 }
 
 interface CompileOptions {
-	attachment?: UUID,
+	attachment?: Collection,
 	raw?: boolean
 }
 export function setupBlockymodelCodec(): Codec {
@@ -75,7 +75,6 @@ export function setupBlockymodelCodec(): Codec {
 		load(model, file, args = {}) {
 			let format = this.format;
 
-			if (Collection.all) console.log(file, Project, Collection.all.slice(), Collection.all.find(c => c.export_path == file.path))
 			if (Project && Collection.all.find(c => c.export_path == file.path)) {
 				format = Formats.hytale_attachment;
 			}
@@ -112,7 +111,6 @@ export function setupBlockymodelCodec(): Codec {
 				lod: 'auto'
 			}
 			let node_id = 1;
-			const attach_collection = options.attachment && Collection.all.find(c => c.uuid == options.attachment);
 
 			let formatVector = (input: ArrayVector3) => {
 				return new oneLiner({
@@ -281,13 +279,9 @@ export function setupBlockymodelCodec(): Codec {
 
 			function compileNode(element: Group | Cube): BlockymodelNode | undefined {
 				// Filter attachment
-				if (attach_collection) {
-					if (!attach_collection.contains(element)) return;
-				} else {
+				if (!options.attachment) {
 					let collection = Collection.all.find(c => c.contains(element));
-					if (collection && (!options.attachment || options.attachment == collection.uuid)) {
-						return;
-					}
+					if (collection) return;
 				}
 
 				let euler = Reusable.euler1.set(
@@ -313,7 +307,7 @@ export function setupBlockymodelCodec(): Codec {
 				}
 				let node: BlockymodelNode = {
 					id: node_id.toString(),
-					name: element.name,
+					name: element.name.replace(/^.+:/, ''),
 					position: formatVector(origin),
 					orientation,
 					shape: {
@@ -356,7 +350,11 @@ export function setupBlockymodelCodec(): Codec {
 
 				return node;
 			}
-			for (let group of Outliner.root) {
+			let groups = Outliner.root.filter(g => g instanceof Group);
+			if (options.attachment instanceof Collection) {
+				groups = (options.attachment as Collection).getChildren().filter(g => g instanceof Group);
+			}
+			for (let group of groups) {
 				let compiled = group instanceof Group && compileNode(group);
 				if (compiled) model.nodes.push(compiled);
 			}
@@ -688,6 +686,31 @@ export function setupBlockymodelCodec(): Codec {
 				}
 			}
 			return {new_groups, new_textures};
+		},
+		async export(options?: CompileOptions) {
+			if (Object.keys(this.export_options).length) {
+				let result = await this.promptExportOptions();
+				if (result === null) return;
+			}
+			Blockbench.export({
+				resource_id: 'model',
+				type: this.name,
+				extensions: [this.extension],
+				name: this.fileName(),
+				startpath: this.startPath(),
+				content: this.compile(options),
+				custom_writer: isApp ? (a, b) => this.write(a, b) : null,
+			}, path => this.afterDownload(path))
+		},
+		async exportCollection(collection: Collection) {
+			this.patchCollectionExport(collection, async () => {
+				await this.export({attachment: collection});
+			})
+		},
+		async writeCollection(collection: Collection) {
+			this.patchCollectionExport(collection, async () => {
+				this.write(this.compile({attachment: collection}), collection.export_path);
+			})
 		}
 	})
 	let export_action = new Action('export_blockymodel', {
@@ -703,5 +726,16 @@ export function setupBlockymodelCodec(): Codec {
 	codec.export_action = export_action;
 	track(codec, export_action);
 	MenuBar.menus.file.addAction(export_action, 'export.1');
+
+	
+	let hook = Blockbench.on('quick_save_model', () => {
+		if (FORMAT_IDS.includes(Format.id) == false) return;
+		for (let collection of Collection.all) {
+			if (collection.export_codec != codec.id) continue;
+			codec.writeCollection(collection);
+		}
+	});
+	track(hook);
+
 	return codec;
 }
