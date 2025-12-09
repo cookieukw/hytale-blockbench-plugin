@@ -642,7 +642,7 @@ export function setupBlockymodelCodec(): Codec {
 				let project = Project;
 				let dirname = PathModule.dirname(path);
 				let model_file_name = pathToName(path, false);
-				let fs = requireNativeModule('fs', {scope: PathModule.resolve(dirname, '..')});
+				let fs = requireNativeModule('fs');
 
 				let texture_files = fs.readdirSync(dirname);
 				for (let file_name of texture_files) {

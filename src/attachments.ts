@@ -111,6 +111,8 @@ export function setupAttachments() {
 		}
 	})
 	Collection.menu.addAction(reload_attachment_action, 10);
+	track(reload_attachment_action);
+
 	let assign_texture: CustomMenuItem = {
 		id: 'set_texture',
 		name: 'menu.cube.texture',
