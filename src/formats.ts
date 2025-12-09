@@ -15,6 +15,7 @@ export function setupFormats() {
         target: 'Hytale',
         codec,
 
+        forward_direction: '+z',
         single_texture_default: true,
         animation_files: true,
         animation_mode: true,

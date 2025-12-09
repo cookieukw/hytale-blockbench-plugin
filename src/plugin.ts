@@ -5,21 +5,16 @@ import { setupElements } from "./element";
 import { setupChecks } from "./validation";
 // @ts-expect-error
 import Package from './../package.json'
-import { FORMAT_IDS, setupFormats } from "./formats";
+import { setupFormats } from "./formats";
 import { setupPhotoshopTools } from "./photoshop_copy_paste";
 
-const HytaleAnglePreset: AnglePreset = {
-    projection: 'perspective',
-    position: [112, 80, 112],
-    target: [0, 32, 0],
-}
-
 BBPlugin.register('hytale_plugin', {
-    title: 'Hytale Plugin',
+    title: 'Hytale Models',
     author: 'JannisX11',
     icon: 'icon.png',
     version: Package.version,
     description: 'Adds support for creating models and animations for Hytale',
+    tags: ['Hytale'],
     variant: 'both',
     min_version: '5.0.0',
     has_changelog: true,
@@ -33,13 +28,6 @@ BBPlugin.register('hytale_plugin', {
         setupAttachments();
         setupChecks();
         setupPhotoshopTools();
-
-        
-		Blockbench.on('load_editor_state', ({project}) => {
-            if (FORMAT_IDS.includes(Format.id) && project && !project.previews[Preview.selected.id]) {
-                Preview.selected.loadAnglePreset(HytaleAnglePreset);
-            }
-        });
 
         let on_finish_edit = Blockbench.on('generate_texture_template', (arg) => {
             for (let element of arg.elements) {
