@@ -1244,19 +1244,8 @@
   // src/uv_cycling.ts
   var cycleState = null;
   var CLICK_THRESHOLD = 5;
-  function screenToUV(event, targetElement) {
-    const rect = targetElement.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
-    const vue = UVEditor.vue;
-    const texture_width = UVEditor.texture_width || Project.texture_width || 16;
-    const texture_height = UVEditor.texture_height || Project.texture_height || 16;
-    const scaleX = vue.inner_width / texture_width;
-    const scaleY = vue.inner_height / texture_height;
-    return {
-      x: mouseX / scaleX,
-      y: mouseY / scaleY
-    };
+  function screenToUV(event) {
+    return UVEditor.getBrushCoordinates(event, UVEditor.texture);
   }
   function isPointInRect(x, y, rect) {
     const minX = Math.min(rect.ax, rect.bx);
@@ -1271,7 +1260,7 @@
       if (!cube.visibility) continue;
       for (const faceKey in cube.faces) {
         const face = cube.faces[faceKey];
-        if (face.texture === null || face.texture === false) continue;
+        if (face.enabled === false) continue;
         const rect = face.getBoundingRect();
         if (isPointInRect(uvX, uvY, rect)) {
           faces.push({ cube, faceKey });
@@ -1317,7 +1306,7 @@
         if (!FORMAT_IDS.includes(Format.id)) return;
         if (Modes.paint) return;
         if (event.button !== 0) return;
-        pendingClick = { uvPos: screenToUV(event, uv_viewport) };
+        pendingClick = { uvPos: screenToUV(event) };
       }
       function handleMouseUp(event) {
         if (!pendingClick) return;
@@ -1572,26 +1561,6 @@
       setupChecks();
       setupPhotoshopTools();
       setupUVCycling();
-      let showCollectionsSetting = new Setting("hytale_show_collections", {
-        name: "Show Collections Panel",
-        description: "Show the collections panel on the right sidebar (folded) by default",
-        category: "defaults",
-        value: true,
-        onChange(value) {
-          if (value) {
-            Panels.collections.default_configuration.default_position.slot = "right_bar";
-            Panels.collections.default_configuration.default_position.folded = true;
-          } else {
-            Panels.collections.default_configuration.default_position.slot = "hidden";
-            Panels.collections.default_configuration.default_position.folded = false;
-          }
-        }
-      });
-      track(showCollectionsSetting);
-      if (showCollectionsSetting.value) {
-        Panels.collections.default_configuration.default_position.slot = "right_bar";
-        Panels.collections.default_configuration.default_position.folded = true;
-      }
       let on_finish_edit = Blockbench.on("generate_texture_template", (arg) => {
         for (let element of arg.elements) {
           if (typeof element.autouv != "number") continue;

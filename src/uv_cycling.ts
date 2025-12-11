@@ -15,27 +15,11 @@ interface UVCycleState {
 }
 
 let cycleState: UVCycleState | null = null;
-const CLICK_THRESHOLD = 5; // UV pixels - tolerance for "same position"
+const CLICK_THRESHOLD = 5;
 
-function screenToUV(event: MouseEvent, targetElement: Element): { x: number; y: number } {
-	const rect = targetElement.getBoundingClientRect();
-	const mouseX = event.clientX - rect.left;
-	const mouseY = event.clientY - rect.top;
-
-	// @ts-expect-error UVEditor is typed as any
-	const vue = UVEditor.vue;
+function screenToUV(event: MouseEvent): { x: number; y: number } {
 	// @ts-expect-error
-	const texture_width = UVEditor.texture_width || Project.texture_width || 16;
-	// @ts-expect-error
-	const texture_height = UVEditor.texture_height || Project.texture_height || 16;
-
-	const scaleX = vue.inner_width / texture_width;
-	const scaleY = vue.inner_height / texture_height;
-
-	return {
-		x: mouseX / scaleX,
-		y: mouseY / scaleY
-	};
+	return UVEditor.getBrushCoordinates(event, UVEditor.texture);
 }
 
 function isPointInRect(x: number, y: number, rect: any): boolean {
@@ -54,7 +38,9 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 
 		for (const faceKey in cube.faces) {
 			const face = cube.faces[faceKey];
-			if (face.texture === null || face.texture === false) continue;
+			// Skip disabled faces. Don't check texture===false because
+			// Hytale single-texture format uses false for all faces
+			if (face.enabled === false) continue;
 
 			const rect = face.getBoundingRect();
 			if (isPointInRect(uvX, uvY, rect)) {
@@ -63,7 +49,7 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 		}
 	}
 
-	// Sort by cube name then face key for consistent order
+	// Sort for consistent cycle order
 	faces.sort((a, b) => {
 		if (a.cube.name !== b.cube.name) {
 			return a.cube.name.localeCompare(b.cube.name);
@@ -71,8 +57,8 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 		return a.faceKey.localeCompare(b.faceKey);
 	});
 
-	// Rotate array so current selection is first
-	// @ts-expect-error UVEditor API
+	// Rotate so current selection is first
+	// @ts-expect-error
 	const currentSelectedFaces = UVEditor.selected_faces || [];
 	const currentCube = Cube.selected[0];
 
@@ -81,7 +67,6 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 		const currentIndex = faces.findIndex(
 			f => f.cube.uuid === currentCube.uuid && f.faceKey === currentFaceKey
 		);
-
 		if (currentIndex > 0) {
 			return [...faces.slice(currentIndex), ...faces.slice(0, currentIndex)];
 		}
@@ -92,12 +77,10 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 
 function selectFace(cube: Cube, faceKey: string): void {
 	cube.select();
-
-	// @ts-expect-error UVEditor API
+	// @ts-expect-error
 	UVEditor.getSelectedFaces(cube, true).replace([faceKey]);
 	// @ts-expect-error
 	UVEditor.vue.$forceUpdate();
-
 	Canvas.updateView({
 		elements: [cube],
 		element_aspects: { faces: true }
@@ -105,7 +88,7 @@ function selectFace(cube: Cube, faceKey: string): void {
 }
 
 export function setupUVCycling() {
-	// @ts-expect-error Panels global
+	// @ts-expect-error
 	const uvPanel = Panels.uv;
 	if (!uvPanel) return;
 
@@ -121,7 +104,7 @@ export function setupUVCycling() {
 			if (Modes.paint) return;
 			if (event.button !== 0) return;
 
-			pendingClick = { uvPos: screenToUV(event, uv_viewport) };
+			pendingClick = { uvPos: screenToUV(event) };
 		}
 
 		function handleMouseUp(event: MouseEvent) {
@@ -137,13 +120,10 @@ export function setupUVCycling() {
 
 			if (isSamePosition && cycleState) {
 				cycleState.currentIndex = (cycleState.currentIndex + 1) % cycleState.facesAtPosition.length;
-
 				const { cube, faceKey } = cycleState.facesAtPosition[cycleState.currentIndex];
-
 				setTimeout(() => selectFace(cube, faceKey), 50);
 			} else {
 				const faces = getFacesAtUVPosition(uvPos.x, uvPos.y);
-
 				if (faces.length > 1) {
 					cycleState = {
 						lastClickX: uvPos.x,
