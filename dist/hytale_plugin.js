@@ -20,6 +20,85 @@
   };
 
   // src/blockymodel.ts
+  function discoverTexturePaths(dirname, modelName) {
+    let fs = requireNativeModule("fs");
+    let paths = [];
+    let dirFiles = fs.readdirSync(dirname);
+    for (let fileName of dirFiles) {
+      if (fileName.match(/\.png$/i) && (fileName.startsWith(modelName) || fileName == "Texture.png")) {
+        paths.push(PathModule.join(dirname, fileName));
+      }
+    }
+    let texturesFolderPath = PathModule.join(dirname, `${modelName}_Textures`);
+    if (fs.existsSync(texturesFolderPath) && fs.statSync(texturesFolderPath).isDirectory()) {
+      let folderFiles = fs.readdirSync(texturesFolderPath);
+      for (let fileName of folderFiles) {
+        if (fileName.match(/\.png$/i)) {
+          paths.push(PathModule.join(texturesFolderPath, fileName));
+        }
+      }
+    }
+    return [...new Set(paths)];
+  }
+  function loadTexturesFromPaths(paths, preferredName) {
+    const textures = [];
+    for (let texturePath of paths) {
+      let texture = Texture.all.find((t) => t.path == texturePath);
+      if (!texture) {
+        texture = new Texture().fromPath(texturePath).add(false, true);
+      }
+      textures.push(texture);
+    }
+    if (textures.length > 0) {
+      let primary = preferredName && textures.find((t) => t.name.startsWith(preferredName)) || textures[0];
+      primary.select();
+      if (!Texture.all.find((t) => t.use_as_default)) {
+        primary.use_as_default = true;
+      }
+    }
+    return textures;
+  }
+  function promptForTextures(dirname) {
+    Blockbench.showMessageBox({
+      title: "Import Textures",
+      message: "No textures were found for this model. How would you like to import textures?",
+      buttons: ["Select Files", "Select Folder", "Skip"]
+    }, (choice) => {
+      let project = Project;
+      if (choice === 2 || !project) return;
+      if (choice === 0) {
+        Blockbench.import({
+          resource_id: "texture",
+          extensions: ["png"],
+          type: "PNG Textures",
+          multiple: true,
+          readtype: "image",
+          startpath: dirname
+        }, (files) => {
+          if (Project !== project || files.length === 0) return;
+          let paths = files.map((f) => f.path).filter((p) => !!p);
+          loadTexturesFromPaths(paths);
+        });
+      } else if (choice === 1) {
+        let folderPath = Blockbench.pickDirectory({
+          title: "Select Texture Folder",
+          startpath: dirname,
+          resource_id: "texture"
+        });
+        if (folderPath && Project === project) {
+          let fs = requireNativeModule("fs");
+          let files = fs.readdirSync(folderPath);
+          let pngFiles = files.filter((f) => f.match(/\.png$/i));
+          if (pngFiles.length === 0) {
+            Blockbench.showQuickMessage("No PNG files found in selected folder");
+            return;
+          }
+          let paths = pngFiles.map((f) => PathModule.join(folderPath, f));
+          loadTexturesFromPaths(paths);
+        }
+      }
+    });
+  }
   function setupBlockymodelCodec() {
     let codec = new Codec("blockymodel", {
       name: "Hytale Blockymodel",
@@ -248,7 +327,7 @@
               offset: formatVector([0, 0, 0]),
               stretch: formatVector([0, 0, 0]),
               settings: {
-                isPiece: false
+                isPiece: element instanceof Group && element.isPiece || false
               },
               textureLayout: {},
               unwrapMode: "custom",
@@ -304,7 +383,7 @@
         function parseNode(node, parent_node, parent_group = "root", parent_offset) {
           if (args.attachment) {
             let attachment_node;
-            if (args.attachment && node.shape?.type == "none" && existing_groups.length) {
+            if (args.attachment && node.shape?.settings?.isPiece === true && existing_groups.length) {
               let node_name = node.name;
               attachment_node = existing_groups.find((g) => g.name == node_name);
             }
@@ -350,6 +429,9 @@
               group.color = 1;
             }
             group.init();
+            group.extend({
+              isPiece: node.shape?.settings?.isPiece ?? false
+            });
           }
           if (node.shape.type != "none") {
             let switchIndices = function(arr, i1, i2) {
@@ -544,26 +626,23 @@
         for (let node of model.nodes) {
           parseNode(node, null);
         }
-        const new_textures = [];
+        let new_textures = [];
         if (isApp && path) {
           let project = Project;
           let dirname = PathModule.dirname(path);
           let model_file_name = pathToName(path, false);
           let fs = requireNativeModule("fs");
-          let texture_files = fs.readdirSync(dirname);
-          for (let file_name of texture_files) {
-            if (file_name.match(/\.png$/i) && (file_name.startsWith(model_file_name) || file_name == "Texture.png")) {
-              let path2 = PathModule.join(dirname, file_name);
-              let texture = Texture.all.find((t) => t.path == path2);
-              if (!texture) {
-                texture = new Texture().fromPath(path2).add(false, true);
-                if (texture.name.startsWith(Project.name)) texture.select();
-              }
-              if (!args.attachment && !Texture.all.find((t) => t.use_as_default)) {
-                texture.use_as_default = true;
-              }
-              new_textures.push(texture);
-            }
+          let texture_paths = discoverTexturePaths(dirname, model_file_name);
+          if (texture_paths.length > 0 && !args.attachment) {
+            new_textures = loadTexturesFromPaths(texture_paths, Project.name);
+          } else if (texture_paths.length > 0) {
+            new_textures = loadTexturesFromPaths(texture_paths);
+          }
+          if (new_textures.length === 0 && !args.attachment) {
+            setTimeout(() => {
+              if (Project !== project) return;
+              promptForTextures(dirname);
+            }, 100);
           }
           if (!args?.attachment) {
             let listener = Blockbench.on("select_mode", ({ mode }) => {
@@ -1139,6 +1218,17 @@
       }
     });
     track(property_double_sided);
+    let property_isPiece = new Property(Group, "boolean", "isPiece", {
+      condition: { formats: FORMAT_IDS },
+      inputs: {
+        element_panel: {
+          input: { label: "isPiece", type: "checkbox" },
+          onChange() {
+          }
+        }
+      }
+    });
+    track(property_isPiece);
     let add_quad_action = new Action("hytale_add_quad", {
       name: "Add Quad",
       icon: "highlighter_size_5",
@@ -1397,7 +1487,7 @@
       build: "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js",
       dev: "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js --watch"
     },
-    author: "JannisX11",
+    author: "JannisX11, Kanno",
     license: "MIT",
     dependencies: {
       "blockbench-types": "^5.0.0"
@@ -1543,7 +1633,7 @@
   // src/plugin.ts
   BBPlugin.register("hytale_plugin", {
     title: "Hytale Models",
-    author: "JannisX11",
+    author: "JannisX11, Kanno",
     icon: "icon.png",
     version: package_default.version,
     description: "Adds support for creating models and animations for Hytale",
