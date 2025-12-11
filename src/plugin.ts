@@ -29,6 +29,30 @@ BBPlugin.register('hytale_plugin', {
         setupChecks();
         setupPhotoshopTools();
 
+        // Collections panel setting
+        let showCollectionsSetting = new Setting('hytale_show_collections', {
+            name: 'Show Collections Panel',
+            description: 'Show the collections panel on the right sidebar (folded) by default',
+            category: 'defaults',
+            value: true,
+            onChange(value) {
+                if (value) {
+                    Panels.collections.default_configuration.default_position.slot = 'right_bar';
+                    Panels.collections.default_configuration.default_position.folded = true;
+                } else {
+                    Panels.collections.default_configuration.default_position.slot = 'hidden';
+                    Panels.collections.default_configuration.default_position.folded = false;
+                }
+            }
+        });
+        track(showCollectionsSetting);
+
+        // Apply setting on load
+        if (showCollectionsSetting.value) {
+            Panels.collections.default_configuration.default_position.slot = 'right_bar';
+            Panels.collections.default_configuration.default_position.folded = true;
+        }
+
         let on_finish_edit = Blockbench.on('generate_texture_template', (arg) => {
             for (let element of arg.elements) {
                 if (typeof element.autouv != 'number') continue;
