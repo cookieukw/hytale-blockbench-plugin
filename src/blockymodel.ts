@@ -1,4 +1,4 @@
-import { parseAnimationFile } from "./animation"
+import { parseAnimationFile } from "./blockyanim"
 import { track } from "./cleanup"
 import { Config } from "./config"
 import { FORMAT_IDS } from "./formats"

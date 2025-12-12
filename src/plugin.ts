@@ -1,5 +1,6 @@
-import { setupAnimationActions } from "./animation";
+import { setupAnimationCodec } from "./blockyanim";
 import { setupAttachments } from "./attachments";
+import { setupAnimation } from "./animations";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
 import { setupUVCycling } from "./uv_cycling";
@@ -26,7 +27,8 @@ BBPlugin.register('hytale_plugin', {
 
         setupFormats();
         setupElements();
-        setupAnimationActions();
+        setupAnimation();
+        setupAnimationCodec();
         setupAttachments();
         setupChecks();
         setupPhotoshopTools();
