@@ -19,6 +19,184 @@
     }
   };
 
+  // src/texture.ts
+  function updateUVSize(texture) {
+    let size = [texture.width, texture.display_height];
+    let frames = texture.frameCount;
+    if (settings.detect_flipbook_textures.value == false || frames <= 2 || frames % 1) {
+      size[1] = texture.height;
+    }
+    texture.uv_width = size[0];
+    texture.uv_height = size[1];
+  }
+
+  // src/attachments.ts
+  var reload_all_attachments;
+  function setupAttachments() {
+    let import_as_attachment = new Action("import_as_hytale_attachment", {
+      name: "Import Attachment",
+      icon: "fa-hat-cowboy",
+      condition: { formats: FORMAT_IDS },
+      click() {
+        Filesystem.importFile({
+          extensions: ["blockymodel"],
+          type: "Blockymodel",
+          multiple: true,
+          startpath: Project.export_path.replace(/[\\\/]\w+.\w+$/, "") + osfs + "Attachments"
+        }, (files) => {
+          for (let file of files) {
+            let json = autoParseJSON(file.content);
+            let attachment_name = file.name.replace(/\.\w+$/, "");
+            let content = Codecs.blockymodel.parse(json, file.path, { attachment: attachment_name });
+            let name = file.name.split(".")[0];
+            let new_groups = content.new_groups;
+            let root_groups = new_groups.filter((group) => !new_groups.includes(group.parent));
+            let collection = new Collection({
+              name,
+              children: root_groups.map((g) => g.uuid),
+              export_codec: "blockymodel",
+              visibility: true
+            }).add();
+            collection.export_path = file.path;
+            let new_textures = content.new_textures;
+            if (new_textures.length) {
+              let texture_group = new TextureGroup({ name });
+              texture_group.add();
+              new_textures.forEach((tex) => tex.group = texture_group.uuid);
+              for (let texture2 of new_textures) {
+                updateUVSize(texture2);
+              }
+              let texture = new_textures.find((t) => t.name.startsWith(attachment_name)) ?? new_textures[0];
+              collection.texture = texture.uuid;
+              Canvas.updateAllFaces();
+            }
+          }
+        });
+      }
+    });
+    track(import_as_attachment);
+    let toolbar = Panels.collections.toolbars[0];
+    toolbar.add(import_as_attachment);
+    let texture_property = new Property(Collection, "string", "texture", {
+      condition: { formats: FORMAT_IDS }
+    });
+    track(texture_property);
+    function getCollection(cube) {
+      return Collection.all.find((c) => c.contains(cube));
+    }
+    let originalGetTexture = CubeFace.prototype.getTexture;
+    CubeFace.prototype.getTexture = function(...args) {
+      if (Format.id == "hytale_character") {
+        let collection = getCollection(this.cube);
+        if (collection && "texture" in collection && collection.texture) {
+          let texture = Texture.all.find((t) => t.uuid == collection.texture);
+          if (texture) return texture;
+        }
+      }
+      return originalGetTexture.call(this, ...args);
+    };
+    track({
+      delete() {
+        CubeFace.prototype.getTexture = originalGetTexture;
+      }
+    });
+    function reloadAttachment(collection) {
+      for (let child of collection.getChildren()) {
+        child.remove();
+      }
+      Filesystem.readFile([collection.export_path], {}, ([file]) => {
+        let json = autoParseJSON(file.content);
+        let content = Codecs.blockymodel.parse(json, file.path, { attachment: collection.name });
+        let new_groups = content.new_groups;
+        let root_groups = new_groups.filter((group) => !new_groups.includes(group.parent));
+        collection.extend({
+          children: root_groups.map((g) => g.uuid)
+        }).add();
+        Canvas.updateAllFaces();
+      });
+    }
+    let reload_attachment_action = new Action("reload_hytale_attachment", {
+      name: "Reload Attachment",
+      icon: "refresh",
+      condition: () => Collection.selected.length && Modes.edit,
+      click() {
+        for (let collection of Collection.selected) {
+          reloadAttachment(collection);
+        }
+      }
+    });
+    Collection.menu.addAction(reload_attachment_action, 10);
+    track(reload_attachment_action);
+    let remove_attachment_action = new Action("remove_hytale_attachment", {
+      name: "Remove Attachment",
+      icon: "remove_selection",
+      condition: () => Collection.selected.length && Modes.edit,
+      click() {
+        for (let collection of [...Collection.selected]) {
+          for (let child of collection.getChildren()) {
+            child.remove();
+          }
+          let texture_group = TextureGroup.all.find((tg) => tg.name === collection.name);
+          if (texture_group) {
+            for (let texture of [...Texture.all.filter((t) => t.group === texture_group.uuid)]) {
+              texture.remove();
+            }
+            texture_group.remove();
+          }
+          Collection.all.remove(collection);
+        }
+      }
+    });
+    Collection.menu.addAction(remove_attachment_action, 11);
+    track(remove_attachment_action);
+    reload_all_attachments = new Action("reload_all_hytale_attachments", {
+      name: "Reload All Attachments",
+      icon: "sync",
+      condition: { formats: FORMAT_IDS },
+      click() {
+        for (let collection of Collection.all.filter((c) => c.export_path)) {
+          reloadAttachment(collection);
+        }
+      }
+    });
+    track(reload_all_attachments);
+    toolbar.add(reload_all_attachments);
+    let assign_texture = {
+      id: "set_texture",
+      name: "menu.cube.texture",
+      icon: "collections",
+      condition: { formats: FORMAT_IDS },
+      children(context) {
+        function applyTexture(texture_value, undo_message) {
+          Undo.initEdit({ collections: Collection.selected });
+          for (let collection of Collection.selected) {
+            collection.texture = texture_value;
+          }
+          Undo.finishEdit(undo_message);
+          Canvas.updateAllFaces();
+        }
+        let arr = [
+          { icon: "crop_square", name: Format.single_texture_default ? "menu.cube.texture.default" : "menu.cube.texture.blank", click(group) {
+            applyTexture("", "Unassign texture from collection");
+          } }
+        ];
+        Texture.all.forEach((t) => {
+          arr.push({
+            name: t.name,
+            // @ts-ignore
+            icon: t.img,
+            marked: t.uuid == context.texture,
+            click() {
+              applyTexture(t.uuid, "Apply texture to collection");
+            }
+          });
+        });
+        return arr;
+      }
+    };
+    Collection.menu.addAction(assign_texture);
+  }
+
   // src/blockymodel.ts
   function setupBlockymodelCodec() {
     let codec = new Codec("blockymodel", {
@@ -248,7 +426,7 @@
               offset: formatVector([0, 0, 0]),
               stretch: formatVector([0, 0, 0]),
               settings: {
-                isPiece: false
+                isPiece: element instanceof Group && element.isPiece || false
               },
               textureLayout: {},
               unwrapMode: "custom",
@@ -304,7 +482,7 @@
         function parseNode(node, parent_node, parent_group = "root", parent_offset) {
           if (args.attachment) {
             let attachment_node;
-            if (args.attachment && node.shape?.type == "none" && existing_groups.length) {
+            if (args.attachment && node.shape?.settings?.isPiece === true && existing_groups.length) {
               let node_name = node.name;
               attachment_node = existing_groups.find((g) => g.name == node_name);
             }
@@ -350,6 +528,9 @@
               group.color = 1;
             }
             group.init();
+            group.extend({
+              isPiece: node.shape?.settings?.isPiece ?? false
+            });
           }
           if (node.shape.type != "none") {
             let switchIndices = function(arr, i1, i2) {
@@ -699,7 +880,11 @@
       icon: "icon-format_hytale",
       format_page,
       block_size: 64,
-      ...common
+      ...common,
+      onActivation() {
+        common.onActivation?.();
+        setTimeout(() => reload_all_attachments?.click(), 0);
+      }
     });
     let format_attachment = new ModelFormat("hytale_attachment", {
       name: "Hytale Attachment",
@@ -707,7 +892,11 @@
       icon: "icon-format_hytale",
       format_page,
       block_size: 64,
-      ...common
+      ...common,
+      onActivation() {
+        common.onActivation?.();
+        console.log("format_attachment activated");
+      }
     });
     let format_prop = new ModelFormat("hytale_prop", {
       name: "Hytale Prop",
@@ -715,7 +904,11 @@
       icon: "icon-format_hytale",
       format_page,
       block_size: 32,
-      ...common
+      ...common,
+      onActivation() {
+        common.onActivation?.();
+        console.log("format_prop activated");
+      }
     });
     codec.format = format_character;
     track(format_character);
@@ -968,145 +1161,6 @@
     };
   });
 
-  // src/texture.ts
-  function updateUVSize(texture) {
-    let size = [texture.width, texture.display_height];
-    let frames = texture.frameCount;
-    if (settings.detect_flipbook_textures.value == false || frames <= 2 || frames % 1) {
-      size[1] = texture.height;
-    }
-    texture.uv_width = size[0];
-    texture.uv_height = size[1];
-  }
-
-  // src/attachments.ts
-  function setupAttachments() {
-    let import_as_attachment = new Action("import_as_hytale_attachment", {
-      name: "Import Attachment",
-      icon: "fa-hat-cowboy",
-      click() {
-        Filesystem.importFile({
-          extensions: ["blockymodel"],
-          type: "Blockymodel",
-          multiple: true,
-          startpath: Project.export_path.replace(/[\\\/]\w+.\w+$/, "") + osfs + "Attachments"
-        }, (files) => {
-          for (let file of files) {
-            let json = autoParseJSON(file.content);
-            let attachment_name = file.name.replace(/\.\w+$/, "");
-            let content = Codecs.blockymodel.parse(json, file.path, { attachment: attachment_name });
-            let name = file.name.split(".")[0];
-            let new_groups = content.new_groups;
-            let root_groups = new_groups.filter((group) => !new_groups.includes(group.parent));
-            let collection = new Collection({
-              name,
-              children: root_groups.map((g) => g.uuid),
-              export_codec: "blockymodel",
-              visibility: true
-            }).add();
-            collection.export_path = file.path;
-            let new_textures = content.new_textures;
-            if (new_textures.length) {
-              let texture_group = new TextureGroup({ name });
-              texture_group.add();
-              new_textures.forEach((tex) => tex.group = texture_group.uuid);
-              for (let texture2 of new_textures) {
-                updateUVSize(texture2);
-              }
-              let texture = new_textures.find((t) => t.name.startsWith(attachment_name)) ?? new_textures[0];
-              collection.texture = texture.uuid;
-              Canvas.updateAllFaces();
-            }
-          }
-        });
-      }
-    });
-    track(import_as_attachment);
-    let toolbar = Panels.collections.toolbars[0];
-    toolbar.add(import_as_attachment);
-    let texture_property = new Property(Collection, "string", "texture", {
-      condition: { formats: FORMAT_IDS }
-    });
-    track(texture_property);
-    function getCollection(cube) {
-      return Collection.all.find((c) => c.contains(cube));
-    }
-    let originalGetTexture = CubeFace.prototype.getTexture;
-    CubeFace.prototype.getTexture = function(...args) {
-      if (Format.id == "hytale_character") {
-        let collection = getCollection(this.cube);
-        if (collection && "texture" in collection && collection.texture) {
-          let texture = Texture.all.find((t) => t.uuid == collection.texture);
-          if (texture) return texture;
-        }
-      }
-      return originalGetTexture.call(this, ...args);
-    };
-    track({
-      delete() {
-        CubeFace.prototype.getTexture = originalGetTexture;
-      }
-    });
-    let reload_attachment_action = new Action("reload_hytale_attachment", {
-      name: "Reload Attachment",
-      icon: "refresh",
-      condition: () => Collection.selected.length && Modes.edit,
-      click() {
-        for (let collection of Collection.selected) {
-          for (let child of Collection.selected[0].getChildren()) {
-            child.remove();
-          }
-          Filesystem.readFile([collection.export_path], {}, ([file]) => {
-            let json = autoParseJSON(file.content);
-            let content = Codecs.blockymodel.parse(json, file.path, { attachment: collection.name });
-            let new_groups = content.new_groups;
-            let root_groups = new_groups.filter((group) => !new_groups.includes(group.parent));
-            collection.extend({
-              children: root_groups.map((g) => g.uuid)
-            }).add();
-            Canvas.updateAllFaces();
-          });
-        }
-      }
-    });
-    Collection.menu.addAction(reload_attachment_action, 10);
-    track(reload_attachment_action);
-    let assign_texture = {
-      id: "set_texture",
-      name: "menu.cube.texture",
-      icon: "collections",
-      condition: { formats: FORMAT_IDS },
-      children(context) {
-        function applyTexture(texture_value, undo_message) {
-          Undo.initEdit({ collections: Collection.selected });
-          for (let collection of Collection.selected) {
-            collection.texture = texture_value;
-          }
-          Undo.finishEdit(undo_message);
-          Canvas.updateAllFaces();
-        }
-        let arr = [
-          { icon: "crop_square", name: Format.single_texture_default ? "menu.cube.texture.default" : "menu.cube.texture.blank", click(group) {
-            applyTexture("", "Unassign texture from collection");
-          } }
-        ];
-        Texture.all.forEach((t) => {
-          arr.push({
-            name: t.name,
-            // @ts-ignore
-            icon: t.img,
-            marked: t.uuid == context.texture,
-            click() {
-              applyTexture(t.uuid, "Apply texture to collection");
-            }
-          });
-        });
-        return arr;
-      }
-    };
-    Collection.menu.addAction(assign_texture);
-  }
-
   // src/element.ts
   function setupElements() {
     let property_shading_mode = new Property(Cube, "enum", "shading_mode", {
@@ -1139,6 +1193,17 @@
       }
     });
     track(property_double_sided);
+    let property_isPiece = new Property(Group, "boolean", "isPiece", {
+      condition: { formats: FORMAT_IDS },
+      inputs: {
+        element_panel: {
+          input: { label: "isPiece", type: "checkbox" },
+          onChange() {
+          }
+        }
+      }
+    });
+    track(property_isPiece);
     let add_quad_action = new Action("hytale_add_quad", {
       name: "Add Quad",
       icon: "highlighter_size_5",
@@ -1397,7 +1462,7 @@
       build: "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js",
       dev: "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js --watch"
     },
-    author: "JannisX11",
+    author: "JannisX11, Kanno",
     license: "MIT",
     dependencies: {
       "blockbench-types": "^5.0.0"
@@ -1543,7 +1608,7 @@
   // src/plugin.ts
   BBPlugin.register("hytale_plugin", {
     title: "Hytale Models",
-    author: "JannisX11",
+    author: "JannisX11, Kanno",
     icon: "icon.png",
     version: package_default.version,
     description: "Adds support for creating models and animations for Hytale",

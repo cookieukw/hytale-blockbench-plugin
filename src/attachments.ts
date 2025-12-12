@@ -2,11 +2,14 @@ import { track } from "./cleanup";
 import { FORMAT_IDS } from "./formats";
 import { updateUVSize } from "./texture";
 
+export let reload_all_attachments: Action;
+
 export function setupAttachments() {
 
 	let import_as_attachment = new Action('import_as_hytale_attachment', {
 		name: 'Import Attachment',
 		icon: 'fa-hat-cowboy',
+		condition: {formats: FORMAT_IDS},
 		click() {
 			Filesystem.importFile({
 				extensions: ['blockymodel'],
@@ -84,34 +87,74 @@ export function setupAttachments() {
 		}
 	});
 
+	function reloadAttachment(collection: Collection) {
+		for (let child of collection.getChildren()) {
+			child.remove();
+		}
+
+		Filesystem.readFile([collection.export_path], {}, ([file]) => {
+			let json = autoParseJSON(file.content as string);
+			let content: any = Codecs.blockymodel.parse(json, file.path, {attachment: collection.name});
+
+			let new_groups = content.new_groups as Group[];
+			let root_groups = new_groups.filter(group => !new_groups.includes(group.parent as Group));
+
+			collection.extend({
+				children: root_groups.map(g => g.uuid),
+			}).add();
+
+			Canvas.updateAllFaces();
+		})
+	}
+
 	let reload_attachment_action = new Action('reload_hytale_attachment', {
 		name: 'Reload Attachment',
 		icon: 'refresh',
 		condition: () => Collection.selected.length && Modes.edit,
 		click() {
 			for (let collection of Collection.selected) {
-				for (let child of Collection.selected[0].getChildren()) {
-					child.remove();
-				}
-
-				Filesystem.readFile([collection.export_path], {}, ([file]) => {
-					let json = autoParseJSON(file.content as string);
-					let content: any = Codecs.blockymodel.parse(json, file.path, {attachment: collection.name});
-
-					let new_groups = content.new_groups as Group[];
-					let root_groups = new_groups.filter(group => !new_groups.includes(group.parent as Group));
-
-					collection.extend({
-						children: root_groups.map(g => g.uuid),
-					}).add();
-
-					Canvas.updateAllFaces();
-				})
+				reloadAttachment(collection);
 			}
 		}
 	})
 	Collection.menu.addAction(reload_attachment_action, 10);
 	track(reload_attachment_action);
+
+	let remove_attachment_action = new Action('remove_hytale_attachment', {
+		name: 'Remove Attachment',
+		icon: 'remove_selection',
+		condition: () => Collection.selected.length && Modes.edit,
+		click() {
+			for (let collection of [...Collection.selected]) {
+				for (let child of collection.getChildren()) {
+					child.remove();
+				}
+				let texture_group = TextureGroup.all.find(tg => tg.name === collection.name);
+				if (texture_group) {
+					for (let texture of [...Texture.all.filter(t => t.group === texture_group.uuid)]) {
+						texture.remove();
+					}
+					texture_group.remove();
+				}
+				Collection.all.remove(collection);
+			}
+		}
+	})
+	Collection.menu.addAction(remove_attachment_action, 11);
+	track(remove_attachment_action);
+
+	reload_all_attachments = new Action('reload_all_hytale_attachments', {
+		name: 'Reload All Attachments',
+		icon: 'sync',
+		condition: {formats: FORMAT_IDS},
+		click() {
+			for (let collection of Collection.all.filter(c => c.export_path)) {
+				reloadAttachment(collection);
+			}
+		}
+	});
+	track(reload_all_attachments);
+	toolbar.add(reload_all_attachments);
 
 	let assign_texture: CustomMenuItem = {
 		id: 'set_texture',
