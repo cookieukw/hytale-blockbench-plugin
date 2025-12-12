@@ -28,14 +28,6 @@ BBPlugin.register('hytale_plugin', {
         setupAttachments();
         setupChecks();
         setupPhotoshopTools();
-
-        let on_finish_edit = Blockbench.on('generate_texture_template', (arg) => {
-            for (let element of arg.elements) {
-                if (typeof element.autouv != 'number') continue;
-                element.autouv = 1;
-            }
-        })
-        track(on_finish_edit);
         
     },
     onunload() {

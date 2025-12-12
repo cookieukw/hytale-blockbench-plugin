@@ -128,6 +128,7 @@ export function setupElements() {
 
 	// UV workflow
 	Blockbench.on('finish_edit', (arg: {aspects: UndoAspects}) => {
+        if (!FORMAT_IDS.includes(Format.id)) return;
 		if (arg.aspects?.elements) {
 			let changes = false;
 			for (let element of arg.aspects.elements) {
@@ -143,5 +144,5 @@ export function setupElements() {
 				UVEditor.vue.$forceUpdate();
 			}
 		}
-	})
+	});
 };
