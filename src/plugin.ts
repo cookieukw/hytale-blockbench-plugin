@@ -2,6 +2,7 @@ import { setupAnimationActions } from "./animation";
 import { setupAttachments } from "./attachments";
 import { cleanup, track } from "./cleanup";
 import { setupElements } from "./element";
+import { setupUVCycling } from "./uv_cycling";
 import { setupChecks } from "./validation";
 // @ts-expect-error
 import Package from './../package.json'
@@ -11,7 +12,7 @@ import { CustomPivotMarker } from "./pivot_marker"
 
 BBPlugin.register('hytale_plugin', {
     title: 'Hytale Models',
-    author: 'JannisX11',
+    author: 'JannisX11, Kanno',
     icon: 'icon.png',
     version: Package.version,
     description: 'Adds support for creating models and animations for Hytale',
@@ -29,6 +30,7 @@ BBPlugin.register('hytale_plugin', {
         setupAttachments();
         setupChecks();
         setupPhotoshopTools();
+        setupUVCycling();
 
         let pivot_marker = new CustomPivotMarker();
         track(pivot_marker)

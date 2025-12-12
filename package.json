@@ -8,10 +8,10 @@
     "build": "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js",
     "dev": "esbuild src/plugin.ts --bundle --outfile=dist/hytale_plugin.js --watch"
   },
-  "author": "JannisX11",
+  "author": "JannisX11, Kanno",
   "license": "MIT",
   "dependencies": {
-    "blockbench-types": "../../../../../xampp/htdocs/blockbench/blockbench/types"
+    "blockbench-types": "^5.0.0"
   },
   "devDependencies": {
     "esbuild": "^0.25.9"
