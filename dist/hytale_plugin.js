@@ -728,6 +728,9 @@
       "format_category.hytale": "Hytale"
     });
   }
+  function isHytaleFormat() {
+    return Format && FORMAT_IDS.includes(Format.id);
+  }
 
   // src/blockyanim.ts
   var FPS = 60;
@@ -971,6 +974,32 @@
     }
     texture.uv_width = size[0];
     texture.uv_height = size[1];
+  }
+  function setupTextureHandling() {
+    let setting = new Setting("preview_selected_texture", {
+      name: "Preview Selected Texture",
+      description: "When selecting a texture in a Hytale format, preview the texture on the model instantly",
+      category: "preview",
+      type: "toggle",
+      value: true
+    });
+    track(setting);
+    let handler = Blockbench.on("select_texture", (arg) => {
+      if (!isHytaleFormat()) return;
+      if (setting.value == false) return;
+      let texture = arg.texture;
+      let texture_group = texture.getGroup();
+      if (texture_group) {
+        let collection = Collection.all.find((c) => c.name == texture_group.name);
+        if (collection) {
+          collection.texture = texture.uuid;
+          Canvas.updateAllFaces(texture);
+        }
+      } else {
+        texture.setAsDefaultTexture();
+      }
+    });
+    track(handler);
   }
 
   // src/attachments.ts
@@ -1755,6 +1784,7 @@
       setupChecks();
       setupPhotoshopTools();
       setupUVCycling();
+      setupTextureHandling();
       let pivot_marker = new CustomPivotMarker();
       track(pivot_marker);
     },
