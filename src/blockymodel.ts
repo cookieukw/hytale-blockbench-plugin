@@ -58,7 +58,7 @@ type CubeHytale = Cube & {
 }
 
 type GroupHytale = Group & {
-	isPiece: boolean
+	is_piece: boolean
 }
 
 interface CompileOptions {
@@ -319,7 +319,7 @@ export function setupBlockymodelCodec(): Codec {
 						offset: formatVector([0, 0, 0]),
 						stretch: formatVector([0, 0, 0]),
 						settings: {
-							isPiece: (element instanceof Group && (element as GroupHytale).isPiece) || false
+							isPiece: (element instanceof Group && (element as GroupHytale).is_piece) || false
 						},
 						textureLayout: {},
 						unwrapMode: "custom",
@@ -434,7 +434,8 @@ export function setupBlockymodelCodec(): Codec {
 
 					group.init();
 					group.extend({
-						isPiece: node.shape?.settings?.isPiece ?? false,
+						// @ts-ignore
+						is_piece: node.shape?.settings?.isPiece ?? false,
 					});
 				}
 
