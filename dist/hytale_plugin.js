@@ -613,14 +613,10 @@
         }, (path) => this.afterDownload(path));
       },
       async exportCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          await this.export({ attachment: collection });
-        });
+        await this.export({ attachment: collection });
       },
       async writeCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          this.write(this.compile({ attachment: collection }), collection.export_path);
-        });
+        this.write(this.compile({ attachment: collection }), collection.export_path);
       }
     });
     let export_action = new Action("export_blockymodel", {
