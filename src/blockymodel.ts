@@ -65,6 +65,113 @@ interface CompileOptions {
 	attachment?: Collection,
 	raw?: boolean
 }
+
+/**
+ * Discovers texture paths for a model by checking:
+ * 1. Same directory - files matching model name or Texture.png
+ * 2. {ModelName}_Textures subfolder
+ */
+function discoverTexturePaths(dirname: string, modelName: string): string[] {
+	let fs = requireNativeModule('fs');
+	let paths: string[] = [];
+
+	// 1. Same directory - files matching model name or Texture.png
+	let dirFiles = fs.readdirSync(dirname);
+	for (let fileName of dirFiles) {
+		if (fileName.match(/\.png$/i) && (fileName.startsWith(modelName) || fileName == 'Texture.png')) {
+			paths.push(PathModule.join(dirname, fileName));
+		}
+	}
+
+	// 2. Check for {ModelName}_Textures folder
+	let texturesFolderPath = PathModule.join(dirname, `${modelName}_Textures`);
+	if (fs.existsSync(texturesFolderPath) && fs.statSync(texturesFolderPath).isDirectory()) {
+		let folderFiles = fs.readdirSync(texturesFolderPath);
+		for (let fileName of folderFiles) {
+			if (fileName.match(/\.png$/i)) {
+				paths.push(PathModule.join(texturesFolderPath, fileName));
+			}
+		}
+	}
+
+	// Remove duplicates
+	return [...new Set(paths)];
+}
+
+/**
+ * Loads textures from an array of file paths.
+ * Optionally prefers a texture matching preferredName as primary.
+ */
+function loadTexturesFromPaths(paths: string[], preferredName?: string): Texture[] {
+	const textures: Texture[] = [];
+	for (let texturePath of paths) {
+		let texture = Texture.all.find(t => t.path == texturePath);
+		if (!texture) {
+			texture = new Texture().fromPath(texturePath).add(false, true);
+		}
+		textures.push(texture);
+	}
+	if (textures.length > 0) {
+		let primary = (preferredName && textures.find(t => t.name.startsWith(preferredName))) || textures[0];
+		primary.select();
+		if (!Texture.all.find(t => t.use_as_default)) {
+			primary.use_as_default = true;
+		}
+	}
+	return textures;
+}
+
+/**
+ * Prompts the user to import textures when none are found automatically.
+ * Offers options to select individual files or a folder containing textures.
+ */
+function promptForTextures(dirname: string) {
+	Blockbench.showMessageBox({
+		title: 'Import Textures',
+		message: 'No textures were found for this model. How would you like to import textures?',
+		buttons: ['Select Files', 'Select Folder', 'Skip'],
+	}, (choice) => {
+		let project = Project;
+		if (choice === 2 || !project) return;
+
+		if (choice === 0) {
+			// Select individual texture files
+			Blockbench.import({
+				resource_id: 'texture',
+				extensions: ['png'],
+				type: 'PNG Textures',
+				multiple: true,
+				readtype: 'image',
+				startpath: dirname
+			}, (files) => {
+				if (Project !== project || files.length === 0) return;
+				let paths = files.map(f => f.path).filter((p): p is string => !!p);
+				loadTexturesFromPaths(paths);
+			});
+		} else if (choice === 1) {
+			// Select folder containing textures
+			let folderPath = Blockbench.pickDirectory({
+				title: 'Select Texture Folder',
+				startpath: dirname,
+				resource_id: 'texture'
+			});
+			if (folderPath && Project === project) {
+				let fs = requireNativeModule('fs');
+				let files = fs.readdirSync(folderPath);
+				let pngFiles = files.filter((f: string) => f.match(/\.png$/i));
+
+				if (pngFiles.length === 0) {
+					Blockbench.showQuickMessage('No PNG files found in selected folder');
+					return;
+				}
+
+				let paths = pngFiles.map((f: string) => PathModule.join(folderPath, f));
+				loadTexturesFromPaths(paths);
+			}
+		}
+	});
+}
+
 export function setupBlockymodelCodec(): Codec {
 	let codec = new Codec('blockymodel', {
 		name: 'Hytale Blockymodel',
@@ -645,28 +752,29 @@ export function setupBlockymodelCodec(): Codec {
 				parseNode(node, null);
 			}
 			
-			const new_textures: Texture[] = [];
+			let new_textures: Texture[] = [];
 			if (isApp && path) {
 				let project = Project;
 				let dirname = PathModule.dirname(path);
 				let model_file_name = pathToName(path, false);
 				let fs = requireNativeModule('fs');
 
-				let texture_files = fs.readdirSync(dirname);
-				for (let file_name of texture_files) {
-					if (file_name.match(/\.png$/i) && (file_name.startsWith(model_file_name) || file_name == 'Texture.png')) {
-						let path = PathModule.join(dirname, file_name);
-						let texture = Texture.all.find(t => t.path == path);
-						if (!texture) {
-							texture = new Texture().fromPath(path).add(false, true);
-							if (texture.name.startsWith(Project.name)) texture.select();
-						}
-						if (!args.attachment && !Texture.all.find(t => t.use_as_default)) {
-							texture.use_as_default = true;
-						}
-						new_textures.push(texture);
-					}
+				// Discover and load textures
+				let texture_paths = discoverTexturePaths(dirname, model_file_name);
+				if (texture_paths.length > 0 && !args.attachment) {
+					new_textures = loadTexturesFromPaths(texture_paths, Project.name);
+				} else if (texture_paths.length > 0) {
+					new_textures = loadTexturesFromPaths(texture_paths);
 				}
+
+				// If no textures found automatically, prompt user to import
+				if (new_textures.length === 0 && !args.attachment) {
+					setTimeout(() => {
+						if (Project !== project) return;
+						promptForTextures(dirname);
+					}, 100);
+				}
+
 				if (!args?.attachment) {
 					let listener = Blockbench.on('select_mode', ({mode}) => {
 						if (mode.id != 'animate' || project != Project) return;
