@@ -21,8 +21,8 @@ interface IAnimationObject {
 }
 interface IKeyframe {
 	time: number
-	delta: {x: number, y: number, z: number, w?: number}
-	interpolationType: 'smooth' | 'linear'
+	delta: {x: number, y: number, z: number, w?: number} | boolean
+	interpolationType?: 'smooth' | 'linear'
 }
 
 export function parseAnimationFile(file: Filesystem.FileResult, content: IBlockyAnimJSON) {
@@ -50,25 +50,33 @@ export function parseAnimationFile(file: Filesystem.FileResult, content: IBlocky
 			{ channel: 'rotation', keyframes: anim_data.orientation },
 			{ channel: 'position', keyframes: anim_data.position },
 			{ channel: 'scale', keyframes: anim_data.shapeStretch },
+			{ channel: 'visibility', keyframes: anim_data.shapeVisible },
 		]
 		for (let {channel, keyframes} of anim_channels) {
 			if (!keyframes || keyframes.length == 0) continue;
 
 			for (let kf_data of keyframes) {
 				let data_point;
-				if (channel == 'rotation') {
-					quaternion.set(kf_data.delta.x, kf_data.delta.y, kf_data.delta.z, kf_data.delta.w);
-					euler.setFromQuaternion(quaternion.normalize(), 'ZYX');
+				if (channel == 'visibility') {
 					data_point = {
-						x: Math.radToDeg(euler.x),
-						y: Math.radToDeg(euler.y),
-						z: Math.radToDeg(euler.z),
+						visibility: kf_data.delta as boolean
 					}
 				} else {
-					data_point = {
-						x: kf_data.delta.x,
-						y: kf_data.delta.y,
-						z: kf_data.delta.z,
+					let delta = kf_data.delta as {x: number, y: number, z: number, w?: number};
+					if (channel == 'rotation') {
+						quaternion.set(delta.x, delta.y, delta.z, delta.w);
+						euler.setFromQuaternion(quaternion.normalize(), 'ZYX');
+						data_point = {
+							x: Math.radToDeg(euler.x),
+							y: Math.radToDeg(euler.y),
+							z: Math.radToDeg(euler.z),
+						}
+					} else {
+						data_point = {
+							x: delta.x,
+							y: delta.y,
+							z: delta.z,
+						}
 					}
 				}
 				ba.addKeyframe({
@@ -99,6 +107,7 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 		position: 'position',
 		rotation: 'orientation',
 		scale: 'shapeStretch',
+		visibility: 'shapeVisible',
 	}
 	for (let uuid in animation.animators) {
 		let animator = animation.animators[uuid];
@@ -115,30 +124,36 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 			keyframe_list.sort((a, b) => a.time - b.time);
 			for (let kf of keyframe_list) {
 				let data_point = kf.data_points[0];
-				let delta: any = {
-					x: parseFloat(data_point.x),
-					y: parseFloat(data_point.y),
-					z: parseFloat(data_point.z),
-				};
-				if (channel == 'rotation') {
-					let euler = new THREE.Euler(
-						Math.degToRad(kf.calc('x')),
-						Math.degToRad(kf.calc('y')),
-						Math.degToRad(kf.calc('z')),
-						Format.euler_order,
-					);
-					let quaternion = new THREE.Quaternion().setFromEuler(euler);
-
+				let delta: any;
+				if (channel == 'visibility') {
+					delta = data_point.visibility;
+				} else {
 					delta = {
-						x: quaternion.x,
-						y: quaternion.y,
-						z: quaternion.z,
-						w: quaternion.w,
+						x: parseFloat(data_point.x),
+						y: parseFloat(data_point.y),
+						z: parseFloat(data_point.z),
 					};
+					if (channel == 'rotation') {
+						let euler = new THREE.Euler(
+							Math.degToRad(kf.calc('x')),
+							Math.degToRad(kf.calc('y')),
+							Math.degToRad(kf.calc('z')),
+							Format.euler_order,
+						);
+						let quaternion = new THREE.Quaternion().setFromEuler(euler);
+
+						delta = {
+							x: quaternion.x,
+							y: quaternion.y,
+							z: quaternion.z,
+							w: quaternion.w,
+						};
+					}
+					delta = new oneLiner(delta);
 				}
 				let kf_output: IKeyframe = {
 					time: Math.round(kf.time * FPS),
-					delta: new oneLiner(delta),
+					delta,
 					interpolationType: kf.interpolation == 'catmullrom' ? 'smooth' : 'linear'
 				};
 				timeline.push(kf_output);
@@ -147,14 +162,13 @@ function compileAnimationFile(animation: _Animation): IBlockyAnimJSON {
 		}
 		if (has_data) {
 			node_data.shapeUvOffset = [];
-			node_data.shapeVisible = [];
 			nodeAnimations[name] = node_data;
 		}
 	}
 	return file;
 }
 
-export function setupAnimationActions() {
+export function setupAnimationCodec() {
 	// @ts-expect-error
 	BarItems.load_animation_file.click = function (...args) {
 		if (FORMAT_IDS.includes(Format.id)) {
@@ -261,34 +275,3 @@ export function setupAnimationActions() {
 		}
 	});
 }
-
-// Playback
-function weightedCubicBezier(t: number): number {
-	// Control points
-	let P0 = 0.0, P1 = 0.05, P2 = 0.95, P3 = 1.0;
-	// Weights
-	let W0 = 2.0, W1 = 1.0, W2 = 2.0, W3 = 1.0;
-
-	let b0 = (1 - t) ** 3;
-	let b1 = 3 * (1 - t) ** 2 * t;
-	let b2 = 3 * (1 - t) * t ** 2;
-	let b3 = t ** 3;
-	let w0 = b0 * W0;
-	let w1 = b1 * W1;
-	let w2 = b2 * W2;
-	let w3 = b3 * W3;
-
-	// Weighted sum of points
-	let numerator = w0 * P0 + w1 * P1 + w2 * P2 + w3 * P3;
-	let denominator = w0 + w1 + w2 + w3;
-
-	return numerator / denominator;
-}
-Blockbench.on('interpolate_keyframes', arg => {
-	if (!FORMAT_IDS.includes(Format.id)) return;
-	if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
-	if (arg.keyframe_before.interpolation != 'catmullrom' || arg.keyframe_after.interpolation != 'catmullrom') return;
-	return {
-		t: weightedCubicBezier(arg.t)
-	}
-});

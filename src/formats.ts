@@ -84,3 +84,7 @@ export function setupFormats() {
         'format_category.hytale': 'Hytale'
     })
 }
+
+export function isHytaleFormat() {
+    return Format && FORMAT_IDS.includes(Format.id);
+}

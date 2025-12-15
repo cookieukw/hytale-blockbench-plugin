@@ -327,7 +327,7 @@
               offset: formatVector([0, 0, 0]),
               stretch: formatVector([0, 0, 0]),
               settings: {
-                isPiece: element instanceof Group && element.isPiece || false
+                isPiece: element instanceof Group && element.is_piece || false
               },
               textureLayout: {},
               unwrapMode: "custom",
@@ -430,7 +430,8 @@
             }
             group.init();
             group.extend({
-              isPiece: node.shape?.settings?.isPiece ?? false
+              // @ts-ignore
+              is_piece: node.shape?.settings?.isPiece ?? false
             });
           }
           if (node.shape.type != "none") {
@@ -688,14 +689,10 @@
         }, (path) => this.afterDownload(path));
       },
       async exportCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          await this.export({ attachment: collection });
-        });
+        await this.export({ attachment: collection });
       },
       async writeCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          this.write(this.compile({ attachment: collection }), collection.export_path);
-        });
+        this.write(this.compile({ attachment: collection }), collection.export_path);
       }
     });
     let export_action = new Action("export_blockymodel", {
@@ -804,8 +801,11 @@
       "format_category.hytale": "Hytale"
     });
   }
+  function isHytaleFormat() {
+    return Format && FORMAT_IDS.includes(Format.id);
+  }
 
-  // src/animation.ts
+  // src/blockyanim.ts
   var FPS = 60;
   var Animation = window.Animation;
   function parseAnimationFile(file, content) {
@@ -828,26 +828,34 @@
       const anim_channels = [
         { channel: "rotation", keyframes: anim_data.orientation },
         { channel: "position", keyframes: anim_data.position },
-        { channel: "scale", keyframes: anim_data.shapeStretch }
+        { channel: "scale", keyframes: anim_data.shapeStretch },
+        { channel: "visibility", keyframes: anim_data.shapeVisible }
       ];
       for (let { channel, keyframes } of anim_channels) {
         if (!keyframes || keyframes.length == 0) continue;
         for (let kf_data of keyframes) {
           let data_point;
-          if (channel == "rotation") {
-            quaternion.set(kf_data.delta.x, kf_data.delta.y, kf_data.delta.z, kf_data.delta.w);
-            euler.setFromQuaternion(quaternion.normalize(), "ZYX");
+          if (channel == "visibility") {
             data_point = {
-              x: Math.radToDeg(euler.x),
-              y: Math.radToDeg(euler.y),
-              z: Math.radToDeg(euler.z)
+              visibility: kf_data.delta
             };
           } else {
-            data_point = {
-              x: kf_data.delta.x,
-              y: kf_data.delta.y,
-              z: kf_data.delta.z
-            };
+            let delta = kf_data.delta;
+            if (channel == "rotation") {
+              quaternion.set(delta.x, delta.y, delta.z, delta.w);
+              euler.setFromQuaternion(quaternion.normalize(), "ZYX");
+              data_point = {
+                x: Math.radToDeg(euler.x),
+                y: Math.radToDeg(euler.y),
+                z: Math.radToDeg(euler.z)
+              };
+            } else {
+              data_point = {
+                x: delta.x,
+                y: delta.y,
+                z: delta.z
+              };
+            }
           }
           ba.addKeyframe({
             time: kf_data.time / FPS,
@@ -874,7 +882,8 @@
     const channels = {
       position: "position",
       rotation: "orientation",
-      scale: "shapeStretch"
+      scale: "shapeStretch",
+      visibility: "shapeVisible"
     };
     for (let uuid in animation.animators) {
       let animator = animation.animators[uuid];
@@ -890,29 +899,35 @@
         keyframe_list.sort((a, b) => a.time - b.time);
         for (let kf of keyframe_list) {
           let data_point = kf.data_points[0];
-          let delta = {
-            x: parseFloat(data_point.x),
-            y: parseFloat(data_point.y),
-            z: parseFloat(data_point.z)
-          };
-          if (channel == "rotation") {
-            let euler = new THREE.Euler(
-              Math.degToRad(kf.calc("x")),
-              Math.degToRad(kf.calc("y")),
-              Math.degToRad(kf.calc("z")),
-              Format.euler_order
-            );
-            let quaternion = new THREE.Quaternion().setFromEuler(euler);
+          let delta;
+          if (channel == "visibility") {
+            delta = data_point.visibility;
+          } else {
             delta = {
-              x: quaternion.x,
-              y: quaternion.y,
-              z: quaternion.z,
-              w: quaternion.w
+              x: parseFloat(data_point.x),
+              y: parseFloat(data_point.y),
+              z: parseFloat(data_point.z)
             };
+            if (channel == "rotation") {
+              let euler = new THREE.Euler(
+                Math.degToRad(kf.calc("x")),
+                Math.degToRad(kf.calc("y")),
+                Math.degToRad(kf.calc("z")),
+                Format.euler_order
+              );
+              let quaternion = new THREE.Quaternion().setFromEuler(euler);
+              delta = {
+                x: quaternion.x,
+                y: quaternion.y,
+                z: quaternion.z,
+                w: quaternion.w
+              };
+            }
+            delta = new oneLiner(delta);
           }
           let kf_output = {
             time: Math.round(kf.time * FPS),
-            delta: new oneLiner(delta),
+            delta,
             interpolationType: kf.interpolation == "catmullrom" ? "smooth" : "linear"
           };
           timeline.push(kf_output);
@@ -921,13 +936,12 @@
       }
       if (has_data) {
         node_data.shapeUvOffset = [];
-        node_data.shapeVisible = [];
         nodeAnimations[name] = node_data;
       }
     }
     return file;
   }
-  function setupAnimationActions() {
+  function setupAnimationCodec() {
     BarItems.load_animation_file.click = function(...args) {
       if (FORMAT_IDS.includes(Format.id)) {
         Filesystem.importFile({
@@ -1023,29 +1037,6 @@
       }
     });
   }
-  function weightedCubicBezier(t) {
-    let P0 = 0, P1 = 0.05, P2 = 0.95, P3 = 1;
-    let W0 = 2, W1 = 1, W2 = 2, W3 = 1;
-    let b0 = (1 - t) ** 3;
-    let b1 = 3 * (1 - t) ** 2 * t;
-    let b2 = 3 * (1 - t) * t ** 2;
-    let b3 = t ** 3;
-    let w0 = b0 * W0;
-    let w1 = b1 * W1;
-    let w2 = b2 * W2;
-    let w3 = b3 * W3;
-    let numerator = w0 * P0 + w1 * P1 + w2 * P2 + w3 * P3;
-    let denominator = w0 + w1 + w2 + w3;
-    return numerator / denominator;
-  }
-  Blockbench.on("interpolate_keyframes", (arg) => {
-    if (!FORMAT_IDS.includes(Format.id)) return;
-    if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
-    if (arg.keyframe_before.interpolation != "catmullrom" || arg.keyframe_after.interpolation != "catmullrom") return;
-    return {
-      t: weightedCubicBezier(arg.t)
-    };
-  });
 
   // src/texture.ts
   function updateUVSize(texture) {
@@ -1056,6 +1047,32 @@
     }
     texture.uv_width = size[0];
     texture.uv_height = size[1];
+  }
+  function setupTextureHandling() {
+    let setting = new Setting("preview_selected_texture", {
+      name: "Preview Selected Texture",
+      description: "When selecting a texture in a Hytale format, preview the texture on the model instantly",
+      category: "preview",
+      type: "toggle",
+      value: true
+    });
+    track(setting);
+    let handler = Blockbench.on("select_texture", (arg) => {
+      if (!isHytaleFormat()) return;
+      if (setting.value == false) return;
+      let texture = arg.texture;
+      let texture_group = texture.getGroup();
+      if (texture_group) {
+        let collection = Collection.all.find((c) => c.name == texture_group.name);
+        if (collection) {
+          collection.texture = texture.uuid;
+          Canvas.updateAllFaces(texture);
+        }
+      } else {
+        texture.setAsDefaultTexture();
+      }
+    });
+    track(handler);
   }
 
   // src/attachments.ts
@@ -1186,6 +1203,71 @@
     Collection.menu.addAction(assign_texture);
   }
 
+  // src/animations.ts
+  function setupAnimation() {
+    function displayVisibility(animator) {
+      let group = animator.getGroup();
+      let scene_object = group.scene_object;
+      if (animator.muted.visibility) {
+        scene_object.visible = group.visibility;
+        return;
+      }
+      let previous_keyframe;
+      let previous_time = -Infinity;
+      for (let keyframe of animator.visibility) {
+        if (keyframe.time <= Timeline.time && keyframe.time > previous_time) {
+          previous_keyframe = keyframe;
+          previous_time = keyframe.time;
+        }
+      }
+      if (previous_keyframe && scene_object) {
+        scene_object.visible = previous_keyframe.data_points[0]?.visibility != false;
+      } else if (scene_object) {
+        scene_object.visible = group.visibility;
+      }
+    }
+    BoneAnimator.addChannel("visibility", {
+      name: "Visibility",
+      mutable: true,
+      transform: false,
+      max_data_points: 1,
+      condition: { formats: FORMAT_IDS },
+      displayFrame(animator, multiplier) {
+        displayVisibility(animator);
+      }
+    });
+    let property = new Property(KeyframeDataPoint, "boolean", "visibility", {
+      label: "Visibility",
+      condition: (point) => point.keyframe.channel == "visibility",
+      default: true
+    });
+    track(property);
+    function weightedCubicBezier(t) {
+      let P0 = 0, P1 = 0.05, P2 = 0.95, P3 = 1;
+      let W0 = 2, W1 = 1, W2 = 2, W3 = 1;
+      let b0 = (1 - t) ** 3;
+      let b1 = 3 * (1 - t) ** 2 * t;
+      let b2 = 3 * (1 - t) * t ** 2;
+      let b3 = t ** 3;
+      let w0 = b0 * W0;
+      let w1 = b1 * W1;
+      let w2 = b2 * W2;
+      let w3 = b3 * W3;
+      let numerator = w0 * P0 + w1 * P1 + w2 * P2 + w3 * P3;
+      let denominator = w0 + w1 + w2 + w3;
+      return numerator / denominator;
+    }
+    let on_interpolate = Blockbench.on("interpolate_keyframes", (arg) => {
+      if (!FORMAT_IDS.includes(Format.id)) return;
+      if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
+      if (arg.keyframe_before.interpolation != "catmullrom" || arg.keyframe_after.interpolation != "catmullrom") return;
+      return {
+        t: weightedCubicBezier(arg.t)
+      };
+    });
+    track(on_interpolate);
+  }
+
   // src/element.ts
   function setupElements() {
     let property_shading_mode = new Property(Cube, "enum", "shading_mode", {
@@ -1218,17 +1300,19 @@
       }
     });
     track(property_double_sided);
-    let property_isPiece = new Property(Group, "boolean", "isPiece", {
+    let is_piece_property = new Property(Group, "boolean", "is_piece", {
       condition: { formats: FORMAT_IDS },
       inputs: {
         element_panel: {
-          input: { label: "isPiece", type: "checkbox" },
-          onChange() {
+          input: {
+            label: "Attachment Piece",
+            type: "checkbox",
+            description: "When checked, the node will be attached to a node of the same name when displayed as an attachment in-game."
           }
         }
       }
     });
-    track(property_isPiece);
+    track(is_piece_property);
     let add_quad_action = new Action("hytale_add_quad", {
       name: "Add Quad",
       icon: "highlighter_size_5",
@@ -1314,6 +1398,7 @@
     let add_element_menu = BarItems.add_element.side_menu;
     add_element_menu.addAction(add_quad_action);
     Blockbench.on("finish_edit", (arg) => {
+      if (!FORMAT_IDS.includes(Format.id)) return;
       if (arg.aspects?.elements) {
         let changes = false;
         for (let element of arg.aspects.elements) {
@@ -1448,24 +1533,28 @@
   }
 
   // src/validation.ts
+  var MAX_NODE_COUNT = 255;
+  function getNodeCount() {
+    let node_count = 0;
+    for (let group of Group.all) {
+      if (group.export == false) return;
+      if (Collection.all.find((c) => c.contains(group))) continue;
+      node_count++;
+      let cube_count = 0;
+      for (let cube of group.children) {
+        if (cube instanceof Cube == false || cube.export == false) continue;
+        cube_count++;
+        if (cube_count > 1) node_count++;
+      }
+    }
+    return node_count;
+  }
   function setupChecks() {
     let check = new ValidatorCheck("hytale_node_count", {
       update_triggers: ["update_selection"],
       condition: { formats: FORMAT_IDS },
       run() {
-        const MAX_NODE_COUNT = 255;
-        let node_count = 0;
-        for (let group of Group.all) {
-          if (group.export == false) return;
-          if (Collection.all.find((c) => c.contains(group))) continue;
-          node_count++;
-          let cube_count = 0;
-          for (let cube of group.children) {
-            if (cube instanceof Cube == false || cube.export == false) continue;
-            cube_count++;
-            if (cube_count > 1) node_count++;
-          }
-        }
+        let node_count = getNodeCount();
         if (node_count > MAX_NODE_COUNT) {
           this.fail({
             message: `The model contains ${node_count} nodes, which exceeds the maximum of ${MAX_NODE_COUNT} that Hytale will display.`
@@ -1474,13 +1563,19 @@
       }
     });
     track(check);
+    let listener = Blockbench.on("display_model_stats", ({ stats }) => {
+      if (!FORMAT_IDS.includes(Format.id)) return;
+      let node_count = getNodeCount();
+      stats.splice(0, 0, { label: "Nodes", value: node_count + " / " + MAX_NODE_COUNT });
+    });
+    track(listener);
   }
 
   // package.json
   var package_default = {
     name: "hytale-blockbench-plugin",
     version: "0.3.0",
-    description: "A template for building Blockbench plugins using Typescript and esbuild",
+    description: "Create models and animations for Hytale",
     main: "src/plugin.ts",
     type: "module",
     scripts: {
@@ -1490,7 +1585,7 @@
     author: "JannisX11, Kanno",
     license: "MIT",
     dependencies: {
-      "blockbench-types": "^5.0.0"
+      "blockbench-types": "^5.0.5"
     },
     devDependencies: {
       esbuild: "^0.25.9"
@@ -1630,34 +1725,144 @@
     track(shared_paste);
   }
 
+  // src/pivot_marker.ts
+  var ThickLineAxisHelper = class ThickLineAxisHelper2 extends THREE.LineSegments {
+    constructor(size = 1) {
+      let a = 0.04, b = 0.025;
+      let vertices = [
+        0,
+        a,
+        0,
+        size,
+        a,
+        0,
+        0,
+        0,
+        b,
+        size,
+        0,
+        b,
+        0,
+        0,
+        -b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        a,
+        0,
+        size,
+        a,
+        b,
+        0,
+        0,
+        b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        -b,
+        size,
+        0,
+        a,
+        0,
+        0,
+        a,
+        0,
+        size,
+        0,
+        b,
+        0,
+        0,
+        b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        -b,
+        size
+      ];
+      let geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      let material = new THREE.LineBasicMaterial({ vertexColors: true });
+      super(geometry, material);
+      this.updateColors();
+      material.transparent = true;
+      material.depthTest = false;
+      this.renderOrder = 800;
+    }
+    updateColors() {
+      let colors = [
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray()
+      ];
+      this.geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    }
+  };
+  ThickLineAxisHelper.prototype.constructor = ThickLineAxisHelper;
+  var CustomPivotMarker = class {
+    original_helpers;
+    constructor() {
+      this.original_helpers = Canvas.pivot_marker.children.slice();
+      let [helper1, helper2] = this.original_helpers;
+      let helper1_new = new ThickLineAxisHelper(1);
+      let helper2_new = new ThickLineAxisHelper(1);
+      helper1_new.rotation.copy(helper1.rotation);
+      helper2_new.rotation.copy(helper2.rotation);
+      Canvas.pivot_marker.children.empty();
+      Canvas.pivot_marker.add(helper1_new, helper2_new);
+    }
+    delete() {
+      Canvas.pivot_marker.children.empty();
+      Canvas.pivot_marker.add(...this.original_helpers);
+    }
+  };
+
   // src/plugin.ts
   BBPlugin.register("hytale_plugin", {
     title: "Hytale Models",
     author: "JannisX11, Kanno",
     icon: "icon.png",
     version: package_default.version,
-    description: "Adds support for creating models and animations for Hytale",
+    description: "Create models and animations for Hytale",
     tags: ["Hytale"],
     variant: "both",
-    min_version: "5.0.0",
+    min_version: "5.0.5",
+    await_loading: true,
     has_changelog: true,
     repository: "https://github.com/JannisX11/hytale-blockbench-plugin",
     bug_tracker: "https://github.com/JannisX11/hytale-blockbench-plugin/issues",
     onload() {
       setupFormats();
       setupElements();
-      setupAnimationActions();
+      setupAnimation();
+      setupAnimationCodec();
       setupAttachments();
       setupChecks();
       setupPhotoshopTools();
       setupUVCycling();
-      let on_finish_edit = Blockbench.on("generate_texture_template", (arg) => {
-        for (let element of arg.elements) {
-          if (typeof element.autouv != "number") continue;
-          element.autouv = 1;
-        }
-      });
-      track(on_finish_edit);
+      setupTextureHandling();
+      let pivot_marker = new CustomPivotMarker();
+      track(pivot_marker);
     },
     onunload() {
       cleanup();

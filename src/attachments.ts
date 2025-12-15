@@ -2,6 +2,10 @@ import { track } from "./cleanup";
 import { FORMAT_IDS } from "./formats";
 import { updateUVSize } from "./texture";
 
+export type AttachmentCollection = Collection & {
+	texture: string
+}
+
 export function setupAttachments() {
 
 	let import_as_attachment = new Action('import_as_hytale_attachment', {
@@ -35,7 +39,7 @@ export function setupAttachments() {
 					if (new_textures.length) {
 						let texture_group = new TextureGroup({name});
 						texture_group.add();
-						// @ts-expect-error
+						// @ts-ignore
 						new_textures.forEach(tex => tex.group = texture_group.uuid);
 
 						// Update UV size
