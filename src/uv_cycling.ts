@@ -18,7 +18,6 @@ let cycleState: UVCycleState | null = null;
 const CLICK_THRESHOLD = 5;
 
 function screenToUV(event: MouseEvent): { x: number; y: number } {
-	// @ts-expect-error
 	return UVEditor.getBrushCoordinates(event, UVEditor.texture);
 }
 
@@ -58,7 +57,6 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 	});
 
 	// Rotate so current selection is first
-	// @ts-expect-error
 	const currentSelectedFaces = UVEditor.selected_faces || [];
 	const currentCube = Cube.selected[0];
 
@@ -77,9 +75,7 @@ function getFacesAtUVPosition(uvX: number, uvY: number): Array<{ cube: Cube; fac
 
 function selectFace(cube: Cube, faceKey: string): void {
 	cube.select();
-	// @ts-expect-error
 	UVEditor.getSelectedFaces(cube, true).replace([faceKey]);
-	// @ts-expect-error
 	UVEditor.vue.$forceUpdate();
 	Canvas.updateView({
 		elements: [cube],
@@ -88,7 +84,6 @@ function selectFace(cube: Cube, faceKey: string): void {
 }
 
 export function setupUVCycling() {
-	// @ts-expect-error
 	const uvPanel = Panels.uv;
 	if (!uvPanel) return;
 
@@ -100,7 +95,6 @@ export function setupUVCycling() {
 
 		function handleMouseDown(event: MouseEvent) {
 			if (!FORMAT_IDS.includes(Format.id)) return;
-			// @ts-expect-error
 			if (Modes.paint) return;
 			if (event.button !== 0) return;
 

@@ -1499,7 +1499,7 @@
   var package_default = {
     name: "hytale-blockbench-plugin",
     version: "0.3.0",
-    description: "A template for building Blockbench plugins using Typescript and esbuild",
+    description: "Create models and animations for Hytale",
     main: "src/plugin.ts",
     type: "module",
     scripts: {
@@ -1509,7 +1509,7 @@
     author: "JannisX11, Kanno",
     license: "MIT",
     dependencies: {
-      "blockbench-types": "^5.0.0"
+      "blockbench-types": "^5.0.5"
     },
     devDependencies: {
       esbuild: "^0.25.9"
