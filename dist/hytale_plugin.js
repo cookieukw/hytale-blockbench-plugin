@@ -1258,7 +1258,7 @@
       return numerator / denominator;
     }
     let on_interpolate = Blockbench.on("interpolate_keyframes", (arg) => {
-      if (!FORMAT_IDS.includes(Format.id)) return;
+      if (!isHytaleFormat()) return;
       if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
       if (arg.keyframe_before.interpolation != "catmullrom" || arg.keyframe_after.interpolation != "catmullrom") return;
       return {
@@ -1266,6 +1266,40 @@
       };
     });
     track(on_interpolate);
+    let original_display_scale = BoneAnimator.prototype.displayScale;
+    let original_show_default_pose = Animator.showDefaultPose;
+    BoneAnimator.prototype.displayScale = function displayScale(array, multiplier = 1) {
+      if (!array) return this;
+      if (isHytaleFormat()) {
+        let target_shape = this.group.children.find((c) => c instanceof Cube);
+        if (target_shape) {
+          let initial_stretch = target_shape.stretch.slice();
+          target_shape.stretch.V3_set([
+            initial_stretch[0] * (1 + (array[0] - 1) * multiplier),
+            initial_stretch[1] * (1 + (array[1] - 1) * multiplier),
+            initial_stretch[2] * (1 + (array[2] - 1) * multiplier)
+          ]);
+          Cube.preview_controller.updateGeometry(target_shape);
+          target_shape.stretch.V3_set(initial_stretch);
+        }
+        return;
+      }
+      original_display_scale.call(this, array, multiplier);
+    };
+    Animator.showDefaultPose = function(reduced_updates, ...args) {
+      original_show_default_pose(reduced_updates, ...args);
+      if (isHytaleFormat()) {
+        for (let cube of Cube.all) {
+          Cube.preview_controller.updateGeometry(cube);
+        }
+      }
+    };
+    track({
+      delete() {
+        BoneAnimator.prototype.displayScale = original_display_scale;
+        Animator.showDefaultPose = original_show_default_pose;
+      }
+    });
   }
 
   // src/element.ts
