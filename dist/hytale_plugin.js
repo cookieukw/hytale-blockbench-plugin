@@ -1125,7 +1125,8 @@
     }
     let originalGetTexture = CubeFace.prototype.getTexture;
     CubeFace.prototype.getTexture = function(...args) {
-      if (Format.id == "hytale_character") {
+      if (isHytaleFormat()) {
+        if (this.texture == null) return null;
         let collection = getCollection(this.cube);
         if (collection && "texture" in collection && collection.texture) {
           let texture = Texture.all.find((t) => t.uuid == collection.texture);
@@ -1604,7 +1605,7 @@
   // package.json
   var package_default = {
     name: "hytale-blockbench-plugin",
-    version: "0.3.1",
+    version: "0.3.2",
     description: "Create models and animations for Hytale",
     main: "src/plugin.ts",
     type: "module",

@@ -1,5 +1,5 @@
 import { track } from "./cleanup";
-import { FORMAT_IDS } from "./formats";
+import { FORMAT_IDS, isHytaleFormat } from "./formats";
 import { updateUVSize } from "./texture";
 
 export type AttachmentCollection = Collection & {
@@ -73,7 +73,8 @@ export function setupAttachments() {
 
 	let originalGetTexture = CubeFace.prototype.getTexture;
 	CubeFace.prototype.getTexture = function(...args) {
-		if (Format.id == 'hytale_character') {
+		if (isHytaleFormat()) {
+			if (this.texture == null) return null;
 			let collection = getCollection(this.cube);
 			if (collection && "texture" in collection && collection.texture) {
 				let texture = Texture.all.find(t => t.uuid == collection.texture);
