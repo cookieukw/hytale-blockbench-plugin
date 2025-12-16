@@ -11,6 +11,83 @@
     list.empty();
   }
 
+  // src/name_overlap.ts
+  var Animation = window.Animation;
+  function copyAnimationToGroupsWithSameName(animation, source_group) {
+    let source_animator = animation.getBoneAnimator(source_group);
+    let other_groups = Group.all.filter((g) => g.name == source_group.name && g != source_group);
+    for (let group2 of other_groups) {
+      let animator2 = animation.getBoneAnimator(group2);
+      for (let channel in animator2.channels) {
+        if (animator2[channel] instanceof Array) animator2[channel].empty();
+      }
+      source_animator.keyframes.forEach((kf) => {
+        animator2.addKeyframe(kf, guid());
+      });
+    }
+  }
+  function setupNameOverlap() {
+    Blockbench.on("finish_edit", (arg) => {
+      if (arg.aspects.keyframes && Animation.selected) {
+        let changes = false;
+        let groups = {};
+        if (Timeline.selected_animator) {
+          groups[Timeline.selected_animator.name] = [
+            Timeline.selected_animator.group
+          ];
+        }
+        for (let group of Group.all) {
+          if (!groups[group.name]) groups[group.name] = [];
+          groups[group.name].push(group);
+        }
+        for (let name in groups) {
+          if (groups[name].length >= 2) {
+            copyAnimationToGroupsWithSameName(Animation.selected, groups[name][0]);
+            if (!changes && groups[name].find((g) => g.selected)) changes = true;
+          }
+        }
+        if (changes) {
+          Animator.preview();
+        }
+      }
+    });
+    let bone_animator_select_original = BoneAnimator.prototype.select;
+    BoneAnimator.prototype.select = function select(group_is_selected) {
+      if (!this.getGroup()) {
+        unselectAllElements();
+        return this;
+      }
+      if (this.group.locked) return;
+      for (var key in this.animation.animators) {
+        this.animation.animators[key].selected = false;
+      }
+      if (group_is_selected !== true && this.group) {
+        this.group.select();
+      }
+      GeneralAnimator.prototype.select.call(this);
+      if (this[Toolbox.selected.animation_channel] && (Timeline.selected.length == 0 || Timeline.selected[0].animator != this) && !Blockbench.hasFlag("loading_selection_save")) {
+        var nearest;
+        this[Toolbox.selected.animation_channel].forEach((kf) => {
+          if (Math.abs(kf.time - Timeline.time) < 2e-3) {
+            nearest = kf;
+          }
+        });
+        if (nearest) {
+          nearest.select();
+        }
+      }
+      if (this.group && this.group.parent && this.group.parent !== "root") {
+        this.group.parent.openUp();
+      }
+      return this;
+    };
+    track({
+      delete() {
+        BoneAnimator.prototype.select = bone_animator_select_original;
+      }
+    });
+  }
+
   // src/config.ts
   var Config = {
     json_compile_options: {
@@ -807,9 +884,9 @@
 
   // src/blockyanim.ts
   var FPS = 60;
-  var Animation = window.Animation;
+  var Animation2 = window.Animation;
   function parseAnimationFile(file, content) {
-    let animation = new Animation({
+    let animation = new Animation2({
       name: pathToName(file.name, false),
       length: content.duration / FPS,
       loop: content.holdLastKeyframe ? "hold" : "loop",
@@ -865,9 +942,10 @@
           });
         }
       }
+      if (group) copyAnimationToGroupsWithSameName(animation, group);
     }
     animation.add(false);
-    if (!Animation.selected && Animator.open) {
+    if (!Animation2.selected && Animator.open) {
       animation.select();
     }
   }
@@ -968,7 +1046,7 @@
       condition: { formats: FORMAT_IDS, selected: { animation: true } },
       click() {
         let animation;
-        animation = Animation.selected;
+        animation = Animation2.selected;
         let content = compileJSON(compileAnimationFile(animation), Config.json_compile_options);
         Filesystem.exportFile({
           resource_id: "blockyanim",
@@ -993,13 +1071,13 @@
       }
     });
     track(handler);
-    let original_save = Animation.prototype.save;
-    Animation.prototype.save = function(...args) {
+    let original_save = Animation2.prototype.save;
+    Animation2.prototype.save = function(...args) {
       if (!FORMAT_IDS.includes(Format.id)) {
         return original_save(...args);
       }
       let animation;
-      animation = Animation.selected;
+      animation = Animation2.selected;
       let content = compileJSON(compileAnimationFile(animation), Config.json_compile_options);
       if (isApp && this.path) {
         Blockbench.writeFile(this.path, { content }, (real_path) => {
@@ -1024,7 +1102,7 @@
     };
     track({
       delete() {
-        Animation.prototype.save = original_save;
+        Animation2.prototype.save = original_save;
       }
     });
     let original_condition = BarItems.export_animation_file.condition;
@@ -1895,6 +1973,7 @@
       setupPhotoshopTools();
       setupUVCycling();
       setupTextureHandling();
+      setupNameOverlap();
       let pivot_marker = new CustomPivotMarker();
       track(pivot_marker);
     },
