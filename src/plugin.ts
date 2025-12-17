@@ -30,27 +30,27 @@ BBPlugin.register('hytale_plugin', {
         setupPhotoshopTools();
 
         // Collections panel setting
-        let showCollectionsSetting = new Setting('hytale_show_collections', {
-            name: 'Show Collections Panel',
-            description: 'Show the collections panel on the right sidebar (folded) by default',
-            category: 'defaults',
-            value: true,
-            onChange(value) {
-                if (value) {
-                    Panels.collections.default_configuration.default_position.slot = 'right_bar';
-                    Panels.collections.default_configuration.default_position.folded = true;
-                } else {
-                    Panels.collections.default_configuration.default_position.slot = 'hidden';
-                    Panels.collections.default_configuration.default_position.folded = false;
-                }
-            }
-        });
-        track(showCollectionsSetting);
+        let panel_setup_listener: Deletable;
+        function showCollectionPanel(): boolean {
+            const local_storage_key = 'hytale_plugin:collection_panel_setup';
+            if (localStorage.getItem(local_storage_key)) return true;
+            if (!Modes.edit) return false;
 
-        // Apply setting on load
-        if (showCollectionsSetting.value) {
-            Panels.collections.default_configuration.default_position.slot = 'right_bar';
-            Panels.collections.default_configuration.default_position.folded = true;
+            if (Panels.collections.slot == 'hidden') {
+                Panels.collections.moveTo('right_bar');
+            }
+            if (Panels.collections.folded) {
+                Panels.collections.fold();
+            }
+            if (panel_setup_listener) {
+                panel_setup_listener.delete();
+                panel_setup_listener = undefined;
+            }
+            localStorage.setItem(local_storage_key, "true");
+            return true;
+        }
+        if (!showCollectionPanel()) {
+            panel_setup_listener = Blockbench.on('select_mode', showCollectionPanel);
         }
 
         let on_finish_edit = Blockbench.on('generate_texture_template', (arg) => {
