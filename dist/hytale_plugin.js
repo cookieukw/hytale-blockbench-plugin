@@ -1276,21 +1276,21 @@
         return originalResize.call(this, val, axis, negative, allow_negative, bidirectional);
       }
       const stretch = this.stretch[axis];
-      let fixedVisualPos = null;
+      let fixedEdgePos = null;
       if (!bidirectional) {
-        const baseCenter = (this.from[axis] + this.to[axis]) / 2;
-        const baseHalfSize = Math.abs(this.to[axis] - this.from[axis]) / 2;
-        fixedVisualPos = negative ? baseCenter + baseHalfSize * stretch : baseCenter - baseHalfSize * stretch;
+        const center = (this.from[axis] + this.to[axis]) / 2;
+        const halfSize = Math.abs(this.to[axis] - this.from[axis]) / 2;
+        fixedEdgePos = negative ? center + halfSize * stretch : center - halfSize * stretch;
       }
       const adjustedVal = typeof val === "function" ? (n) => val(n * stretch) / stretch : val / stretch;
       originalResize.call(this, adjustedVal, axis, negative, allow_negative, bidirectional);
-      if (fixedVisualPos !== null) {
-        const newBaseCenter = (this.from[axis] + this.to[axis]) / 2;
-        const newBaseHalfSize = Math.abs(this.to[axis] - this.from[axis]) / 2;
-        const currentFixedPos = negative ? newBaseCenter + newBaseHalfSize * stretch : newBaseCenter - newBaseHalfSize * stretch;
-        const shift = fixedVisualPos - currentFixedPos;
-        this.from[axis] += shift;
-        this.to[axis] += shift;
+      if (fixedEdgePos !== null) {
+        const newCenter = (this.from[axis] + this.to[axis]) / 2;
+        const newHalfSize = Math.abs(this.to[axis] - this.from[axis]) / 2;
+        const currentEdgePos = negative ? newCenter + newHalfSize * stretch : newCenter - newHalfSize * stretch;
+        const drift = fixedEdgePos - currentEdgePos;
+        this.from[axis] += drift;
+        this.to[axis] += drift;
         this.preview_controller.updateGeometry(this);
       }
       return this;
