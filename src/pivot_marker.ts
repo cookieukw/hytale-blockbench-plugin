@@ -81,8 +81,17 @@ export class CustomPivotMarker {
 export class GroupPivotIndicator {
 	dot: THREE.Mesh;
 	listener: Deletable;
+	setting: Setting;
 
 	constructor() {
+		this.setting = new Setting('show_group_pivot_indicator', {
+			name: 'Show Group Pivot Indicator',
+			description: 'Show a dot in Edit mode indicating the rotation pivot point for animations',
+			category: 'preview',
+			type: 'toggle',
+			value: true
+		});
+
 		let geometry = new THREE.SphereGeometry(0.65, 12, 12);
 		let material = new THREE.MeshBasicMaterial({
 			color: this.getAccentColor(),
@@ -106,6 +115,11 @@ export class GroupPivotIndicator {
 	}
 
 	update() {
+		if (!this.setting.value) {
+			this.dot.visible = false;
+			return;
+		}
+
 		let group = this.getRelevantGroup();
 		if (!group) {
 			this.dot.visible = false;
@@ -145,5 +159,6 @@ export class GroupPivotIndicator {
 		this.dot.geometry.dispose();
 		(this.dot.material as THREE.MeshBasicMaterial).dispose();
 		this.listener.delete();
+		this.setting.delete();
 	}
 }
