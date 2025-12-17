@@ -34,16 +34,19 @@ export function setupElements() {
 	});
 	track(property_double_sided);
 
-	let property_isPiece = new Property(Group, 'boolean', 'isPiece', {
+	let is_piece_property = new Property(Group, 'boolean', 'is_piece', {
 		condition: {formats: FORMAT_IDS},
 		inputs: {
 			element_panel: {
-				input: {label: 'isPiece', type: 'checkbox'},
-				onChange() {}
+				input: {
+					label: 'Attachment Piece',
+					type: 'checkbox',
+					description: 'When checked, the node will be attached to a node of the same name when displayed as an attachment in-game.'
+				}
 			}
 		}
 	});
-	track(property_isPiece);
+	track(is_piece_property);
 
 	let add_quad_action = new Action('hytale_add_quad', {
 		name: 'Add Quad',
@@ -139,6 +142,7 @@ export function setupElements() {
 
 	// UV workflow
 	Blockbench.on('finish_edit', (arg: {aspects: UndoAspects}) => {
+        if (!FORMAT_IDS.includes(Format.id)) return;
 		if (arg.aspects?.elements) {
 			let changes = false;
 			for (let element of arg.aspects.elements) {
@@ -154,5 +158,5 @@ export function setupElements() {
 				UVEditor.vue.$forceUpdate();
 			}
 		}
-	})
+	});
 };

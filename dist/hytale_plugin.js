@@ -29,6 +29,32 @@
     texture.uv_width = size[0];
     texture.uv_height = size[1];
   }
+  function setupTextureHandling() {
+    let setting = new Setting("preview_selected_texture", {
+      name: "Preview Selected Texture",
+      description: "When selecting a texture in a Hytale format, preview the texture on the model instantly",
+      category: "preview",
+      type: "toggle",
+      value: true
+    });
+    track(setting);
+    let handler = Blockbench.on("select_texture", (arg) => {
+      if (!isHytaleFormat()) return;
+      if (setting.value == false) return;
+      let texture = arg.texture;
+      let texture_group = texture.getGroup();
+      if (texture_group) {
+        let collection = Collection.all.find((c) => c.name == texture_group.name);
+        if (collection) {
+          collection.texture = texture.uuid;
+          Canvas.updateAllFaces(texture);
+        }
+      } else {
+        texture.setAsDefaultTexture();
+      }
+    });
+    track(handler);
+  }
 
   // src/attachments.ts
   var reload_all_attachments;
@@ -86,7 +112,8 @@
     }
     let originalGetTexture = CubeFace.prototype.getTexture;
     CubeFace.prototype.getTexture = function(...args) {
-      if (Format.id == "hytale_character") {
+      if (isHytaleFormat()) {
+        if (this.texture == null) return null;
         let collection = getCollection(this.cube);
         if (collection && "texture" in collection && collection.texture) {
           let texture = Texture.all.find((t) => t.uuid == collection.texture);
@@ -198,6 +225,84 @@
   }
 
   // src/blockymodel.ts
+  function discoverTexturePaths(dirname, modelName) {
+    let fs = requireNativeModule("fs");
+    let paths = [];
+    let dirFiles = fs.readdirSync(dirname);
+    for (let fileName of dirFiles) {
+      if (fileName.match(/\.png$/i) && (fileName.startsWith(modelName) || fileName == "Texture.png")) {
+        paths.push(PathModule.join(dirname, fileName));
+      }
+    }
+    let texturesFolderPath = PathModule.join(dirname, `${modelName}_Textures`);
+    if (fs.existsSync(texturesFolderPath) && fs.statSync(texturesFolderPath).isDirectory()) {
+      let folderFiles = fs.readdirSync(texturesFolderPath);
+      for (let fileName of folderFiles) {
+        if (fileName.match(/\.png$/i)) {
+          paths.push(PathModule.join(texturesFolderPath, fileName));
+        }
+      }
+    }
+    return [...new Set(paths)];
+  }
+  function loadTexturesFromPaths(paths, preferredName) {
+    const textures = [];
+    for (let texturePath of paths) {
+      let texture = Texture.all.find((t) => t.path == texturePath);
+      if (!texture) {
+        texture = new Texture().fromPath(texturePath).add(false, true);
+      }
+      textures.push(texture);
+    }
+    if (textures.length > 0) {
+      let primary = preferredName && textures.find((t) => t.name.startsWith(preferredName)) || textures[0];
+      if (!Texture.all.find((t) => t.use_as_default)) {
+        primary.use_as_default = true;
+      }
+    }
+    return textures;
+  }
+  function promptForTextures(dirname) {
+    Blockbench.showMessageBox({
+      title: "Import Textures",
+      message: "No textures were found for this model. How would you like to import textures?",
+      buttons: ["Select Files", "Select Folder", "Skip"]
+    }, (choice) => {
+      let project = Project;
+      if (choice === 2 || !project) return;
+      if (choice === 0) {
+        Blockbench.import({
+          resource_id: "texture",
+          extensions: ["png"],
+          type: "PNG Textures",
+          multiple: true,
+          readtype: "image",
+          startpath: dirname
+        }, (files) => {
+          if (Project !== project || files.length === 0) return;
+          let paths = files.map((f) => f.path).filter((p) => !!p);
+          loadTexturesFromPaths(paths);
+        });
+      } else if (choice === 1) {
+        let folderPath = Blockbench.pickDirectory({
+          title: "Select Texture Folder",
+          startpath: dirname,
+          resource_id: "texture"
+        });
+        if (folderPath && Project === project) {
+          let fs = requireNativeModule("fs");
+          let files = fs.readdirSync(folderPath);
+          let pngFiles = files.filter((f) => f.match(/\.png$/i));
+          if (pngFiles.length === 0) {
+            Blockbench.showQuickMessage("No PNG files found in selected folder");
+            return;
+          }
+          let paths = pngFiles.map((f) => PathModule.join(folderPath, f));
+          loadTexturesFromPaths(paths);
+        }
+      }
+    });
+  }
   function setupBlockymodelCodec() {
     let codec = new Codec("blockymodel", {
       name: "Hytale Blockymodel",
@@ -209,17 +314,23 @@
         extensions: ["blockymodel"]
       },
       load(model, file, args = {}) {
+        let path_segments = file.path && file.path.split(/[\\\/]/);
         let format = this.format;
-        if (Project && Collection.all.find((c) => c.export_path == file.path)) {
-          format = Formats.hytale_attachment;
+        if (model.format) {
+          if (model.format == "prop") {
+            format = Formats.hytale_prop;
+          }
+        } else {
+          if (path_segments && path_segments.includes("Blocks")) {
+            format = Formats.hytale_prop;
+          }
         }
         if (!args.import_to_current_project) {
           setupProject(format);
         }
-        if (file.path && isApp && this.remember && !file.no_file) {
-          let parts = file.path.split(/[\\\/]/);
-          parts[parts.length - 1] = parts.last().split(".")[0];
-          Project.name = parts.findLast((p) => p != "Model" && p != "Models" && p != "Attachments") ?? "Model";
+        if (path_segments && isApp && this.remember && !file.no_file) {
+          path_segments[path_segments.length - 1] = path_segments.last().split(".")[0];
+          Project.name = path_segments.findLast((p) => p != "Model" && p != "Models" && p != "Attachments") ?? "Model";
           Project.export_path = file.path;
         }
         this.parse(model, file.path, args);
@@ -239,6 +350,7 @@
       compile(options = {}) {
         let model = {
           nodes: [],
+          format: Format.id == "hytale_prop" ? "prop" : "character",
           lod: "auto"
         };
         let node_id = 1;
@@ -426,7 +538,7 @@
               offset: formatVector([0, 0, 0]),
               stretch: formatVector([0, 0, 0]),
               settings: {
-                isPiece: element instanceof Group && element.isPiece || false
+                isPiece: element instanceof Group && element.is_piece || false
               },
               textureLayout: {},
               unwrapMode: "custom",
@@ -529,7 +641,8 @@
             }
             group.init();
             group.extend({
-              isPiece: node.shape?.settings?.isPiece ?? false
+              // @ts-ignore
+              is_piece: node.shape?.settings?.isPiece ?? false
             });
           }
           if (node.shape.type != "none") {
@@ -725,26 +838,23 @@
         for (let node of model.nodes) {
           parseNode(node, null);
         }
-        const new_textures = [];
+        let new_textures = [];
         if (isApp && path) {
           let project = Project;
           let dirname = PathModule.dirname(path);
           let model_file_name = pathToName(path, false);
           let fs = requireNativeModule("fs");
-          let texture_files = fs.readdirSync(dirname);
-          for (let file_name of texture_files) {
-            if (file_name.match(/\.png$/i) && (file_name.startsWith(model_file_name) || file_name == "Texture.png")) {
-              let path2 = PathModule.join(dirname, file_name);
-              let texture = Texture.all.find((t) => t.path == path2);
-              if (!texture) {
-                texture = new Texture().fromPath(path2).add(false, true);
-                if (texture.name.startsWith(Project.name)) texture.select();
-              }
-              if (!args.attachment && !Texture.all.find((t) => t.use_as_default)) {
-                texture.use_as_default = true;
-              }
-              new_textures.push(texture);
-            }
+          let texture_paths = discoverTexturePaths(dirname, model_file_name);
+          if (texture_paths.length > 0 && !args.attachment) {
+            new_textures = loadTexturesFromPaths(texture_paths, Project.name);
+          } else if (texture_paths.length > 0) {
+            new_textures = loadTexturesFromPaths(texture_paths);
+          }
+          if (new_textures.length === 0 && !args.attachment) {
+            setTimeout(() => {
+              if (Project !== project) return;
+              promptForTextures(dirname);
+            }, 100);
           }
           if (!args?.attachment) {
             let listener = Blockbench.on("select_mode", ({ mode }) => {
@@ -790,14 +900,10 @@
         }, (path) => this.afterDownload(path));
       },
       async exportCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          await this.export({ attachment: collection });
-        });
+        await this.export({ attachment: collection });
       },
       async writeCollection(collection) {
-        this.patchCollectionExport(collection, async () => {
-          this.write(this.compile({ attachment: collection }), collection.export_path);
-        });
+        this.write(this.compile({ attachment: collection }), collection.export_path);
       }
     });
     let export_action = new Action("export_blockymodel", {
@@ -827,7 +933,6 @@
   // src/formats.ts
   var FORMAT_IDS = [
     "hytale_character",
-    "hytale_attachment",
     "hytale_prop"
   ];
   function setupFormats() {
@@ -876,7 +981,7 @@
     };
     let format_character = new ModelFormat("hytale_character", {
       name: "Hytale Character",
-      description: "Create character models using Hytale's blockymodel format",
+      description: "Create character and attachment models using Hytale's blockymodel format",
       icon: "icon-format_hytale",
       format_page,
       block_size: 64,
@@ -886,40 +991,26 @@
         setTimeout(() => reload_all_attachments?.click(), 0);
       }
     });
-    let format_attachment = new ModelFormat("hytale_attachment", {
-      name: "Hytale Attachment",
-      description: "Create attachments using Hytale's blockymodel format",
-      icon: "icon-format_hytale",
-      format_page,
-      block_size: 64,
-      ...common,
-      onActivation() {
-        common.onActivation?.();
-        console.log("format_attachment activated");
-      }
-    });
     let format_prop = new ModelFormat("hytale_prop", {
       name: "Hytale Prop",
       description: "Create prop models using Hytale's blockymodel format",
       icon: "icon-format_hytale",
       format_page,
       block_size: 32,
-      ...common,
-      onActivation() {
-        common.onActivation?.();
-        console.log("format_prop activated");
-      }
+      ...common
     });
     codec.format = format_character;
     track(format_character);
-    track(format_attachment);
     track(format_prop);
     Language.addTranslations("en", {
       "format_category.hytale": "Hytale"
     });
   }
+  function isHytaleFormat() {
+    return Format && FORMAT_IDS.includes(Format.id);
+  }
 
-  // src/animation.ts
+  // src/blockyanim.ts
   var FPS = 60;
   var Animation = window.Animation;
   function parseAnimationFile(file, content) {
@@ -942,26 +1033,34 @@
       const anim_channels = [
         { channel: "rotation", keyframes: anim_data.orientation },
         { channel: "position", keyframes: anim_data.position },
-        { channel: "scale", keyframes: anim_data.shapeStretch }
+        { channel: "scale", keyframes: anim_data.shapeStretch },
+        { channel: "visibility", keyframes: anim_data.shapeVisible }
       ];
       for (let { channel, keyframes } of anim_channels) {
         if (!keyframes || keyframes.length == 0) continue;
         for (let kf_data of keyframes) {
           let data_point;
-          if (channel == "rotation") {
-            quaternion.set(kf_data.delta.x, kf_data.delta.y, kf_data.delta.z, kf_data.delta.w);
-            euler.setFromQuaternion(quaternion.normalize(), "ZYX");
+          if (channel == "visibility") {
             data_point = {
-              x: Math.radToDeg(euler.x),
-              y: Math.radToDeg(euler.y),
-              z: Math.radToDeg(euler.z)
+              visibility: kf_data.delta
             };
           } else {
-            data_point = {
-              x: kf_data.delta.x,
-              y: kf_data.delta.y,
-              z: kf_data.delta.z
-            };
+            let delta = kf_data.delta;
+            if (channel == "rotation") {
+              quaternion.set(delta.x, delta.y, delta.z, delta.w);
+              euler.setFromQuaternion(quaternion.normalize(), "ZYX");
+              data_point = {
+                x: Math.radToDeg(euler.x),
+                y: Math.radToDeg(euler.y),
+                z: Math.radToDeg(euler.z)
+              };
+            } else {
+              data_point = {
+                x: delta.x,
+                y: delta.y,
+                z: delta.z
+              };
+            }
           }
           ba.addKeyframe({
             time: kf_data.time / FPS,
@@ -988,7 +1087,8 @@
     const channels = {
       position: "position",
       rotation: "orientation",
-      scale: "shapeStretch"
+      scale: "shapeStretch",
+      visibility: "shapeVisible"
     };
     for (let uuid in animation.animators) {
       let animator = animation.animators[uuid];
@@ -1004,29 +1104,35 @@
         keyframe_list.sort((a, b) => a.time - b.time);
         for (let kf of keyframe_list) {
           let data_point = kf.data_points[0];
-          let delta = {
-            x: parseFloat(data_point.x),
-            y: parseFloat(data_point.y),
-            z: parseFloat(data_point.z)
-          };
-          if (channel == "rotation") {
-            let euler = new THREE.Euler(
-              Math.degToRad(kf.calc("x")),
-              Math.degToRad(kf.calc("y")),
-              Math.degToRad(kf.calc("z")),
-              Format.euler_order
-            );
-            let quaternion = new THREE.Quaternion().setFromEuler(euler);
+          let delta;
+          if (channel == "visibility") {
+            delta = data_point.visibility;
+          } else {
             delta = {
-              x: quaternion.x,
-              y: quaternion.y,
-              z: quaternion.z,
-              w: quaternion.w
+              x: parseFloat(data_point.x),
+              y: parseFloat(data_point.y),
+              z: parseFloat(data_point.z)
             };
+            if (channel == "rotation") {
+              let euler = new THREE.Euler(
+                Math.degToRad(kf.calc("x")),
+                Math.degToRad(kf.calc("y")),
+                Math.degToRad(kf.calc("z")),
+                Format.euler_order
+              );
+              let quaternion = new THREE.Quaternion().setFromEuler(euler);
+              delta = {
+                x: quaternion.x,
+                y: quaternion.y,
+                z: quaternion.z,
+                w: quaternion.w
+              };
+            }
+            delta = new oneLiner(delta);
           }
           let kf_output = {
             time: Math.round(kf.time * FPS),
-            delta: new oneLiner(delta),
+            delta,
             interpolationType: kf.interpolation == "catmullrom" ? "smooth" : "linear"
           };
           timeline.push(kf_output);
@@ -1035,13 +1141,12 @@
       }
       if (has_data) {
         node_data.shapeUvOffset = [];
-        node_data.shapeVisible = [];
         nodeAnimations[name] = node_data;
       }
     }
     return file;
   }
-  function setupAnimationActions() {
+  function setupAnimationCodec() {
     BarItems.load_animation_file.click = function(...args) {
       if (FORMAT_IDS.includes(Format.id)) {
         Filesystem.importFile({
@@ -1137,29 +1242,105 @@
       }
     });
   }
-  function weightedCubicBezier(t) {
-    let P0 = 0, P1 = 0.05, P2 = 0.95, P3 = 1;
-    let W0 = 2, W1 = 1, W2 = 2, W3 = 1;
-    let b0 = (1 - t) ** 3;
-    let b1 = 3 * (1 - t) ** 2 * t;
-    let b2 = 3 * (1 - t) * t ** 2;
-    let b3 = t ** 3;
-    let w0 = b0 * W0;
-    let w1 = b1 * W1;
-    let w2 = b2 * W2;
-    let w3 = b3 * W3;
-    let numerator = w0 * P0 + w1 * P1 + w2 * P2 + w3 * P3;
-    let denominator = w0 + w1 + w2 + w3;
-    return numerator / denominator;
-  }
-  Blockbench.on("interpolate_keyframes", (arg) => {
-    if (!FORMAT_IDS.includes(Format.id)) return;
-    if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
-    if (arg.keyframe_before.interpolation != "catmullrom" || arg.keyframe_after.interpolation != "catmullrom") return;
-    return {
-      t: weightedCubicBezier(arg.t)
+
+  // src/animations.ts
+  function setupAnimation() {
+    function displayVisibility(animator) {
+      let group = animator.getGroup();
+      let scene_object = group.scene_object;
+      if (animator.muted.visibility) {
+        scene_object.visible = group.visibility;
+        return;
+      }
+      let previous_keyframe;
+      let previous_time = -Infinity;
+      for (let keyframe of animator.visibility) {
+        if (keyframe.time <= Timeline.time && keyframe.time > previous_time) {
+          previous_keyframe = keyframe;
+          previous_time = keyframe.time;
+        }
+      }
+      if (previous_keyframe && scene_object) {
+        scene_object.visible = previous_keyframe.data_points[0]?.visibility != false;
+      } else if (scene_object) {
+        scene_object.visible = group.visibility;
+      }
+    }
+    BoneAnimator.addChannel("visibility", {
+      name: "Visibility",
+      mutable: true,
+      transform: false,
+      max_data_points: 1,
+      condition: { formats: FORMAT_IDS },
+      displayFrame(animator, multiplier) {
+        displayVisibility(animator);
+      }
+    });
+    let property = new Property(KeyframeDataPoint, "boolean", "visibility", {
+      label: "Visibility",
+      condition: (point) => point.keyframe.channel == "visibility",
+      default: true
+    });
+    track(property);
+    function weightedCubicBezier(t) {
+      let P0 = 0, P1 = 0.05, P2 = 0.95, P3 = 1;
+      let W0 = 2, W1 = 1, W2 = 2, W3 = 1;
+      let b0 = (1 - t) ** 3;
+      let b1 = 3 * (1 - t) ** 2 * t;
+      let b2 = 3 * (1 - t) * t ** 2;
+      let b3 = t ** 3;
+      let w0 = b0 * W0;
+      let w1 = b1 * W1;
+      let w2 = b2 * W2;
+      let w3 = b3 * W3;
+      let numerator = w0 * P0 + w1 * P1 + w2 * P2 + w3 * P3;
+      let denominator = w0 + w1 + w2 + w3;
+      return numerator / denominator;
+    }
+    let on_interpolate = Blockbench.on("interpolate_keyframes", (arg) => {
+      if (!isHytaleFormat()) return;
+      if (!arg.use_quaternions || !arg.t || arg.t == 1) return;
+      if (arg.keyframe_before.interpolation != "catmullrom" || arg.keyframe_after.interpolation != "catmullrom") return;
+      return {
+        t: weightedCubicBezier(arg.t)
+      };
+    });
+    track(on_interpolate);
+    let original_display_scale = BoneAnimator.prototype.displayScale;
+    let original_show_default_pose = Animator.showDefaultPose;
+    BoneAnimator.prototype.displayScale = function displayScale(array, multiplier = 1) {
+      if (!array) return this;
+      if (isHytaleFormat()) {
+        let target_shape = this.group.children.find((c) => c instanceof Cube);
+        if (target_shape) {
+          let initial_stretch = target_shape.stretch.slice();
+          target_shape.stretch.V3_set([
+            initial_stretch[0] * (1 + (array[0] - 1) * multiplier),
+            initial_stretch[1] * (1 + (array[1] - 1) * multiplier),
+            initial_stretch[2] * (1 + (array[2] - 1) * multiplier)
+          ]);
+          Cube.preview_controller.updateGeometry(target_shape);
+          target_shape.stretch.V3_set(initial_stretch);
+        }
+        return;
+      }
+      original_display_scale.call(this, array, multiplier);
     };
-  });
+    Animator.showDefaultPose = function(reduced_updates, ...args) {
+      original_show_default_pose(reduced_updates, ...args);
+      if (isHytaleFormat()) {
+        for (let cube of Cube.all) {
+          Cube.preview_controller.updateGeometry(cube);
+        }
+      }
+    };
+    track({
+      delete() {
+        BoneAnimator.prototype.displayScale = original_display_scale;
+        Animator.showDefaultPose = original_show_default_pose;
+      }
+    });
+  }
 
   // src/element.ts
   function setupElements() {
@@ -1193,17 +1374,19 @@
       }
     });
     track(property_double_sided);
-    let property_isPiece = new Property(Group, "boolean", "isPiece", {
+    let is_piece_property = new Property(Group, "boolean", "is_piece", {
       condition: { formats: FORMAT_IDS },
       inputs: {
         element_panel: {
-          input: { label: "isPiece", type: "checkbox" },
-          onChange() {
+          input: {
+            label: "Attachment Piece",
+            type: "checkbox",
+            description: "When checked, the node will be attached to a node of the same name when displayed as an attachment in-game."
           }
         }
       }
     });
-    track(property_isPiece);
+    track(is_piece_property);
     let add_quad_action = new Action("hytale_add_quad", {
       name: "Add Quad",
       icon: "highlighter_size_5",
@@ -1289,6 +1472,7 @@
     let add_element_menu = BarItems.add_element.side_menu;
     add_element_menu.addAction(add_quad_action);
     Blockbench.on("finish_edit", (arg) => {
+      if (!FORMAT_IDS.includes(Format.id)) return;
       if (arg.aspects?.elements) {
         let changes = false;
         for (let element of arg.aspects.elements) {
@@ -1423,24 +1607,28 @@
   }
 
   // src/validation.ts
+  var MAX_NODE_COUNT = 255;
+  function getNodeCount() {
+    let node_count = 0;
+    for (let group of Group.all) {
+      if (group.export == false) return;
+      if (Collection.all.find((c) => c.contains(group))) continue;
+      node_count++;
+      let cube_count = 0;
+      for (let cube of group.children) {
+        if (cube instanceof Cube == false || cube.export == false) continue;
+        cube_count++;
+        if (cube_count > 1) node_count++;
+      }
+    }
+    return node_count;
+  }
   function setupChecks() {
     let check = new ValidatorCheck("hytale_node_count", {
       update_triggers: ["update_selection"],
       condition: { formats: FORMAT_IDS },
       run() {
-        const MAX_NODE_COUNT = 255;
-        let node_count = 0;
-        for (let group of Group.all) {
-          if (group.export == false) return;
-          if (Collection.all.find((c) => c.contains(group))) continue;
-          node_count++;
-          let cube_count = 0;
-          for (let cube of group.children) {
-            if (cube instanceof Cube == false || cube.export == false) continue;
-            cube_count++;
-            if (cube_count > 1) node_count++;
-          }
-        }
+        let node_count = getNodeCount();
         if (node_count > MAX_NODE_COUNT) {
           this.fail({
             message: `The model contains ${node_count} nodes, which exceeds the maximum of ${MAX_NODE_COUNT} that Hytale will display.`
@@ -1449,13 +1637,19 @@
       }
     });
     track(check);
+    let listener = Blockbench.on("display_model_stats", ({ stats }) => {
+      if (!FORMAT_IDS.includes(Format.id)) return;
+      let node_count = getNodeCount();
+      stats.splice(0, 0, { label: "Nodes", value: node_count + " / " + MAX_NODE_COUNT });
+    });
+    track(listener);
   }
 
   // package.json
   var package_default = {
     name: "hytale-blockbench-plugin",
-    version: "0.3.0",
-    description: "A template for building Blockbench plugins using Typescript and esbuild",
+    version: "0.3.2",
+    description: "Create models and animations for Hytale",
     main: "src/plugin.ts",
     type: "module",
     scripts: {
@@ -1465,7 +1659,7 @@
     author: "JannisX11, Kanno",
     license: "MIT",
     dependencies: {
-      "blockbench-types": "^5.0.0"
+      "blockbench-types": "^5.0.5"
     },
     devDependencies: {
       esbuild: "^0.25.9"
@@ -1723,35 +1917,145 @@
     });
   }
 
+  // src/pivot_marker.ts
+  var ThickLineAxisHelper = class ThickLineAxisHelper2 extends THREE.LineSegments {
+    constructor(size = 1) {
+      let a = 0.04, b = 0.025;
+      let vertices = [
+        0,
+        a,
+        0,
+        size,
+        a,
+        0,
+        0,
+        0,
+        b,
+        size,
+        0,
+        b,
+        0,
+        0,
+        -b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        a,
+        0,
+        size,
+        a,
+        b,
+        0,
+        0,
+        b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        -b,
+        size,
+        0,
+        a,
+        0,
+        0,
+        a,
+        0,
+        size,
+        0,
+        b,
+        0,
+        0,
+        b,
+        size,
+        0,
+        -b,
+        0,
+        0,
+        -b,
+        size
+      ];
+      let geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(vertices, 3));
+      let material = new THREE.LineBasicMaterial({ vertexColors: true });
+      super(geometry, material);
+      this.updateColors();
+      material.transparent = true;
+      material.depthTest = false;
+      this.renderOrder = 800;
+    }
+    updateColors() {
+      let colors = [
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.r.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.g.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray(),
+        ...gizmo_colors.b.toArray()
+      ];
+      this.geometry.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+    }
+  };
+  ThickLineAxisHelper.prototype.constructor = ThickLineAxisHelper;
+  var CustomPivotMarker = class {
+    original_helpers;
+    constructor() {
+      this.original_helpers = Canvas.pivot_marker.children.slice();
+      let [helper1, helper2] = this.original_helpers;
+      let helper1_new = new ThickLineAxisHelper(1);
+      let helper2_new = new ThickLineAxisHelper(1);
+      helper1_new.rotation.copy(helper1.rotation);
+      helper2_new.rotation.copy(helper2.rotation);
+      Canvas.pivot_marker.children.empty();
+      Canvas.pivot_marker.add(helper1_new, helper2_new);
+    }
+    delete() {
+      Canvas.pivot_marker.children.empty();
+      Canvas.pivot_marker.add(...this.original_helpers);
+    }
+  };
+
   // src/plugin.ts
   BBPlugin.register("hytale_plugin", {
     title: "Hytale Models",
     author: "JannisX11, Kanno",
     icon: "icon.png",
     version: package_default.version,
-    description: "Adds support for creating models and animations for Hytale",
+    description: "Create models and animations for Hytale",
     tags: ["Hytale"],
     variant: "both",
-    min_version: "5.0.0",
+    min_version: "5.0.5",
+    await_loading: true,
     has_changelog: true,
     repository: "https://github.com/JannisX11/hytale-blockbench-plugin",
     bug_tracker: "https://github.com/JannisX11/hytale-blockbench-plugin/issues",
     onload() {
       setupFormats();
       setupElements();
-      setupAnimationActions();
+      setupAnimation();
+      setupAnimationCodec();
       setupAttachments();
       setupOutlinerFilter();
       setupChecks();
       setupPhotoshopTools();
       setupUVCycling();
-      let on_finish_edit = Blockbench.on("generate_texture_template", (arg) => {
-        for (let element of arg.elements) {
-          if (typeof element.autouv != "number") continue;
-          element.autouv = 1;
-        }
-      });
-      track(on_finish_edit);
+      setupTextureHandling();
+      let pivot_marker = new CustomPivotMarker();
+      track(pivot_marker);
     },
     onunload() {
       cleanup();

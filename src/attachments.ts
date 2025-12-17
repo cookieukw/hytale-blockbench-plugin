@@ -1,8 +1,11 @@
 import { track } from "./cleanup";
-import { FORMAT_IDS } from "./formats";
+import { FORMAT_IDS, isHytaleFormat } from "./formats";
 import { updateUVSize } from "./texture";
 
 export let reload_all_attachments: Action;
+export type AttachmentCollection = Collection & {
+	texture: string
+}
 
 export function setupAttachments() {
 
@@ -38,7 +41,7 @@ export function setupAttachments() {
 					if (new_textures.length) {
 						let texture_group = new TextureGroup({name});
 						texture_group.add();
-						// @ts-expect-error
+						// @ts-ignore
 						new_textures.forEach(tex => tex.group = texture_group.uuid);
 
 						// Update UV size
@@ -72,7 +75,8 @@ export function setupAttachments() {
 
 	let originalGetTexture = CubeFace.prototype.getTexture;
 	CubeFace.prototype.getTexture = function(...args) {
-		if (Format.id == 'hytale_character') {
+		if (isHytaleFormat()) {
+			if (this.texture == null) return null;
 			let collection = getCollection(this.cube);
 			if (collection && "texture" in collection && collection.texture) {
 				let texture = Texture.all.find(t => t.uuid == collection.texture);

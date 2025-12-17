@@ -4,7 +4,6 @@ import { track } from "./cleanup";
 
 export const FORMAT_IDS = [
     'hytale_character',
-    'hytale_attachment',
     'hytale_prop'
 ];
 export function setupFormats() {
@@ -53,7 +52,7 @@ export function setupFormats() {
 
     let format_character = new ModelFormat('hytale_character', {
         name: 'Hytale Character',
-        description: 'Create character models using Hytale\'s blockymodel format',
+        description: 'Create character and attachment models using Hytale\'s blockymodel format',
         icon: 'icon-format_hytale',
         format_page,
         block_size: 64,
@@ -63,37 +62,24 @@ export function setupFormats() {
             setTimeout(() => reload_all_attachments?.click(), 0);
         }
     });
-    let format_attachment = new ModelFormat('hytale_attachment', {
-        name: 'Hytale Attachment',
-        description: 'Create attachments using Hytale\'s blockymodel format',
-        icon: 'icon-format_hytale',
-        format_page,
-        block_size: 64,
-        ...common,
-        onActivation() {
-            common.onActivation?.();
-            console.log('format_attachment activated');
-        }
-    });
     let format_prop = new ModelFormat('hytale_prop', {
         name: 'Hytale Prop',
         description: 'Create prop models using Hytale\'s blockymodel format',
         icon: 'icon-format_hytale',
         format_page,
         block_size: 32,
-        ...common,
-        onActivation() {
-            common.onActivation?.();
-            console.log('format_prop activated');
-        }
+        ...common
     });
 
     codec.format = format_character;
     track(format_character);
-    track(format_attachment);
     track(format_prop);
 
     Language.addTranslations('en', {
         'format_category.hytale': 'Hytale'
     })
+}
+
+export function isHytaleFormat() {
+    return Format && FORMAT_IDS.includes(Format.id);
 }
