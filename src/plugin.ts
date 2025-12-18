@@ -11,6 +11,7 @@ import { setupFormats } from "./formats";
 import { setupPhotoshopTools } from "./photoshop_copy_paste";
 import { CustomPivotMarker } from "./pivot_marker"
 import { setupTextureHandling } from "./texture";
+import { setupUVOutline } from "./uv_outline";
 
 BBPlugin.register('hytale_plugin', {
     title: 'Hytale Models',
@@ -36,6 +37,7 @@ BBPlugin.register('hytale_plugin', {
         setupPhotoshopTools();
         setupUVCycling();
         setupTextureHandling();
+        setupUVOutline();
 
         // Collections panel setting
         let panel_setup_listener: Deletable;
