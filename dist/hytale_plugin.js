@@ -1968,15 +1968,12 @@ body.hytale-uv-outline-only #uv_frame .selection_rectangle {
     background-color: transparent;
 }
 `;
-  var STYLE_ID = "hytale_uv_outline_style";
   function updateHytaleFormatClass() {
     document.body.classList.toggle("hytale-format", isHytaleFormat());
   }
   function setupUVOutline() {
-    const style = document.createElement("style");
-    style.id = STYLE_ID;
-    style.textContent = UV_OUTLINE_CSS;
-    document.head.appendChild(style);
+    const style = Blockbench.addCSS(UV_OUTLINE_CSS);
+    track(style);
     const setting = new Setting("uv_outline_only", {
       name: "UV Outline Only",
       description: "Show only outlines for UV faces instead of filled overlays",
@@ -1991,13 +1988,6 @@ body.hytale-uv-outline-only #uv_frame .selection_rectangle {
     track(selectProjectListener);
     document.body.classList.toggle("hytale-uv-outline-only", settings.uv_outline_only?.value ?? true);
     updateHytaleFormatClass();
-    track({
-      delete() {
-        document.getElementById(STYLE_ID)?.remove();
-        document.body.classList.remove("hytale-uv-outline-only");
-        document.body.classList.remove("hytale-format");
-      }
-    });
   }
 
   // src/plugin.ts
