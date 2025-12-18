@@ -1870,6 +1870,7 @@
   var GroupPivotIndicator = class {
     dot;
     listener;
+    cameraListener;
     setting;
     constructor() {
       this.setting = new Setting("show_group_pivot_indicator", {
@@ -1891,7 +1892,15 @@
       this.dot.visible = false;
       Canvas.scene.add(this.dot);
       this.listener = Blockbench.on("update_selection", () => this.update());
+      this.cameraListener = Blockbench.on("update_camera_position", () => this.updateScale());
       this.update();
+    }
+    updateScale() {
+      if (!this.dot.visible) return;
+      let scale = Preview.selected.calculateControlScale(this.dot.position) || 0.8;
+      if (Blockbench.isTouch) scale *= 1.5;
+      scale *= settings.selection_tolerance.value / 18;
+      this.dot.scale.setScalar(scale);
     }
     getAccentColor() {
       let cssColor = getComputedStyle(document.body).getPropertyValue("--color-accent").trim();
@@ -1914,6 +1923,7 @@
         mesh.getWorldPosition(worldPos);
         this.dot.position.copy(worldPos);
         this.dot.visible = true;
+        this.updateScale();
       } else {
         this.dot.visible = false;
       }
@@ -1934,6 +1944,7 @@
       this.dot.geometry.dispose();
       this.dot.material.dispose();
       this.listener.delete();
+      this.cameraListener.delete();
       this.setting.delete();
     }
   };
