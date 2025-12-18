@@ -1901,6 +1901,85 @@
       Canvas.pivot_marker.add(...this.original_helpers);
     }
   };
+  var GroupPivotIndicator = class {
+    dot;
+    listener;
+    cameraListener;
+    setting;
+    constructor() {
+      this.setting = new Setting("show_group_pivot_indicator", {
+        name: "Show Group Pivot Indicator",
+        description: "Show a dot in Edit mode indicating the rotation pivot point for animations",
+        category: "preview",
+        type: "toggle",
+        value: true
+      });
+      let geometry = new THREE.SphereGeometry(0.65, 12, 12);
+      let material = new THREE.MeshBasicMaterial({
+        color: this.getAccentColor(),
+        transparent: true,
+        opacity: 0.9,
+        depthTest: false
+      });
+      this.dot = new THREE.Mesh(geometry, material);
+      this.dot.renderOrder = 900;
+      this.dot.visible = false;
+      Canvas.scene.add(this.dot);
+      this.listener = Blockbench.on("update_selection", () => this.update());
+      this.cameraListener = Blockbench.on("update_camera_position", () => this.updateScale());
+      this.update();
+    }
+    updateScale() {
+      if (!this.dot.visible) return;
+      let scale = Preview.selected.calculateControlScale(this.dot.position) || 0.8;
+      this.dot.scale.setScalar(scale * 0.7);
+    }
+    getAccentColor() {
+      let cssColor = getComputedStyle(document.body).getPropertyValue("--color-accent").trim();
+      return new THREE.Color(cssColor || "#3e90ff");
+    }
+    update() {
+      if (!this.setting.value) {
+        this.dot.visible = false;
+        return;
+      }
+      let group = this.getRelevantGroup();
+      if (!group) {
+        this.dot.visible = false;
+        return;
+      }
+      this.dot.material.color.copy(this.getAccentColor());
+      let mesh = group.mesh;
+      if (mesh) {
+        let worldPos = new THREE.Vector3();
+        mesh.getWorldPosition(worldPos);
+        this.dot.position.copy(worldPos);
+        this.dot.visible = true;
+        this.updateScale();
+      } else {
+        this.dot.visible = false;
+      }
+    }
+    getRelevantGroup() {
+      let sel = Outliner.selected[0];
+      if (!sel) return null;
+      if (sel instanceof Group) {
+        return sel;
+      }
+      if (sel.parent instanceof Group) {
+        return sel.parent;
+      }
+      return null;
+    }
+    delete() {
+      Canvas.scene.remove(this.dot);
+      this.dot.geometry.dispose();
+      this.dot.material.dispose();
+      this.listener.delete();
+      this.cameraListener.delete();
+      this.setting.delete();
+    }
+  };
 
   // src/uv_outline.ts
   var UV_OUTLINE_CSS = `
@@ -2046,6 +2125,8 @@ body.hytale-uv-outline-only #uv_frame .selection_rectangle {
       track(on_finish_edit);
       let pivot_marker = new CustomPivotMarker();
       track(pivot_marker);
+      let group_pivot_indicator = new GroupPivotIndicator();
+      track(group_pivot_indicator);
     },
     onunload() {
       cleanup();

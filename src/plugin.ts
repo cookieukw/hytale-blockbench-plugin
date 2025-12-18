@@ -9,7 +9,7 @@ import { setupChecks } from "./validation";
 import Package from './../package.json'
 import { setupFormats } from "./formats";
 import { setupPhotoshopTools } from "./photoshop_copy_paste";
-import { CustomPivotMarker } from "./pivot_marker"
+import { CustomPivotMarker, GroupPivotIndicator } from "./pivot_marker"
 import { setupTextureHandling } from "./texture";
 import { setupUVOutline } from "./uv_outline";
 
@@ -73,6 +73,9 @@ BBPlugin.register('hytale_plugin', {
 
         let pivot_marker = new CustomPivotMarker();
         track(pivot_marker)
+
+        let group_pivot_indicator = new GroupPivotIndicator();
+        track(group_pivot_indicator)
         
     },
     onunload() {
