@@ -763,6 +763,7 @@
         { type: "h3", text: tl("mode.start.format.informations") },
         {
           text: `* One texture can be applied to a model at a time
+                    * UV sizes are linked to the size of each cube and cannot be modified, except by stretching the cube
                     * Models can have a maximum of 255 nodes`.replace(/(\t| {4,4})+/g, "")
         },
         { type: "h3", text: tl("mode.start.format.resources") },
@@ -2015,6 +2016,34 @@ body.hytale-uv-outline-only #uv_frame .selection_rectangle {
       setupUVCycling();
       setupTextureHandling();
       setupUVOutline();
+      let panel_setup_listener;
+      function showCollectionPanel() {
+        const local_storage_key = "hytale_plugin:collection_panel_setup";
+        if (localStorage.getItem(local_storage_key)) return true;
+        if (!Modes.edit) return false;
+        if (Panels.collections.slot == "hidden") {
+          Panels.collections.moveTo("right_bar");
+        }
+        if (Panels.collections.folded) {
+          Panels.collections.fold();
+        }
+        if (panel_setup_listener) {
+          panel_setup_listener.delete();
+          panel_setup_listener = void 0;
+        }
+        localStorage.setItem(local_storage_key, "true");
+        return true;
+      }
+      if (!showCollectionPanel()) {
+        panel_setup_listener = Blockbench.on("select_mode", showCollectionPanel);
+      }
+      let on_finish_edit = Blockbench.on("generate_texture_template", (arg) => {
+        for (let element of arg.elements) {
+          if (typeof element.autouv != "number") continue;
+          element.autouv = 1;
+        }
+      });
+      track(on_finish_edit);
       let pivot_marker = new CustomPivotMarker();
       track(pivot_marker);
     },
