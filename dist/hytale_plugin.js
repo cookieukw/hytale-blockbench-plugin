@@ -998,7 +998,7 @@
     let original_save = Animation.prototype.save;
     Animation.prototype.save = function(...args) {
       if (!FORMAT_IDS.includes(Format.id)) {
-        return original_save(...args);
+        return original_save.call(this, ...args);
       }
       let animation;
       animation = Animation.selected;
