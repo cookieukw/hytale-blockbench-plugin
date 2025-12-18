@@ -1898,9 +1898,7 @@
     updateScale() {
       if (!this.dot.visible) return;
       let scale = Preview.selected.calculateControlScale(this.dot.position) || 0.8;
-      if (Blockbench.isTouch) scale *= 1.5;
-      scale *= settings.selection_tolerance.value / 18;
-      this.dot.scale.setScalar(scale);
+      this.dot.scale.setScalar(scale * 0.7);
     }
     getAccentColor() {
       let cssColor = getComputedStyle(document.body).getPropertyValue("--color-accent").trim();

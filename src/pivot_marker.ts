@@ -113,11 +113,9 @@ export class GroupPivotIndicator {
 
 	updateScale() {
 		if (!this.dot.visible) return;
+		// @ts-expect-error
 		let scale = Preview.selected.calculateControlScale(this.dot.position) || 0.8;
-		if (Blockbench.isTouch) scale *= 1.5;
-		// @ts-ignore
-		scale *= (settings.selection_tolerance.value / 18);
-		this.dot.scale.setScalar(scale);
+		this.dot.scale.setScalar(scale * 0.7);
 	}
 
 	getAccentColor(): THREE.Color {
