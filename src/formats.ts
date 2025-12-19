@@ -3,7 +3,6 @@ import { track } from "./cleanup";
 
 export const FORMAT_IDS = [
     'hytale_character',
-    'hytale_attachment',
     'hytale_prop'
 ];
 export function setupFormats() {
@@ -41,6 +40,7 @@ export function setupFormats() {
         content: [
             {type: 'h3', text: tl('mode.start.format.informations')},
             {text: `* One texture can be applied to a model at a time
+                    * UV sizes are linked to the size of each cube and cannot be modified, except by stretching the cube
                     * Models can have a maximum of 255 nodes`.replace(/(\t| {4,4})+/g, '')
             },
             {type: 'h3', text: tl('mode.start.format.resources')},
@@ -52,15 +52,7 @@ export function setupFormats() {
 
     let format_character = new ModelFormat('hytale_character', {
         name: 'Hytale Character',
-        description: 'Create character models using Hytale\'s blockymodel format',
-        icon: 'icon-format_hytale',
-        format_page,
-        block_size: 64,
-        ...common
-    });
-    let format_attachment = new ModelFormat('hytale_attachment', {
-        name: 'Hytale Attachment',
-        description: 'Create attachments using Hytale\'s blockymodel format',
+        description: 'Create character and attachment models using Hytale\'s blockymodel format',
         icon: 'icon-format_hytale',
         format_page,
         block_size: 64,
@@ -77,7 +69,6 @@ export function setupFormats() {
 
     codec.format = format_character;
     track(format_character);
-    track(format_attachment);
     track(format_prop);
 
     Language.addTranslations('en', {

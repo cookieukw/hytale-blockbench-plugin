@@ -19,6 +19,17 @@
     }
   };
 
+  // src/util.ts
+  function qualifiesAsMainShape(object) {
+    return object instanceof Cube && (object.rotation.allEqual(0) || cubeIsQuad(object));
+  }
+  function cubeIsQuad(cube) {
+    return cube.size()[2] == 0;
+  }
+  function getMainShape(group) {
+    return group.children.find(qualifiesAsMainShape);
+  }
+
   // src/blockymodel.ts
   function discoverTexturePaths(dirname, modelName) {
     let fs = requireNativeModule("fs");
@@ -51,7 +62,6 @@
     }
     if (textures.length > 0) {
       let primary = preferredName && textures.find((t) => t.name.startsWith(preferredName)) || textures[0];
-      primary.select();
       if (!Texture.all.find((t) => t.use_as_default)) {
         primary.use_as_default = true;
       }
@@ -110,17 +120,23 @@
         extensions: ["blockymodel"]
       },
       load(model, file, args = {}) {
+        let path_segments = file.path && file.path.split(/[\\\/]/);
         let format = this.format;
-        if (Project && Collection.all.find((c) => c.export_path == file.path)) {
-          format = Formats.hytale_attachment;
+        if (model.format) {
+          if (model.format == "prop") {
+            format = Formats.hytale_prop;
+          }
+        } else {
+          if (path_segments && path_segments.includes("Blocks")) {
+            format = Formats.hytale_prop;
+          }
         }
         if (!args.import_to_current_project) {
           setupProject(format);
         }
-        if (file.path && isApp && this.remember && !file.no_file) {
-          let parts = file.path.split(/[\\\/]/);
-          parts[parts.length - 1] = parts.last().split(".")[0];
-          Project.name = parts.findLast((p) => p != "Model" && p != "Models" && p != "Attachments") ?? "Model";
+        if (path_segments && isApp && this.remember && !file.no_file) {
+          path_segments[path_segments.length - 1] = path_segments.last().split(".")[0];
+          Project.name = path_segments.findLast((p) => p != "Model" && p != "Models" && p != "Attachments") ?? "Model";
           Project.export_path = file.path;
         }
         this.parse(model, file.path, args);
@@ -140,6 +156,7 @@
       compile(options = {}) {
         let model = {
           nodes: [],
+          format: Format.id == "hytale_prop" ? "prop" : "character",
           lod: "auto"
         };
         let node_id = 1;
@@ -150,12 +167,6 @@
             z: input[2]
           });
         };
-        function qualifiesAsMainShape(object) {
-          return object instanceof Cube && (object.rotation.allEqual(0) || cubeIsQuad(object));
-        }
-        function cubeIsQuad(cube) {
-          return cube.size()[2] == 0;
-        }
         function turnNodeIntoBox(node, cube, original_element) {
           let size = cube.size();
           let stretch = cube.stretch.slice();
@@ -284,7 +295,7 @@
           }
         }
         function getNodeOffset(group) {
-          let cube = group.children.find(qualifiesAsMainShape);
+          let cube = getMainShape(group);
           if (cube) {
             let center_pos = cube.from.slice().V3_add(cube.to).V3_divide(2, 2, 2);
             center_pos.V3_subtract(group.origin);
@@ -404,11 +415,11 @@
             Math.radToDeg(rotation_euler.z)
           ];
           if (args.attachment && !parent_node && parent_group instanceof Group) {
-            let reference_node = parent_group.children.find((c) => c instanceof Cube) ?? parent_group;
+            let reference_node = getMainShape(parent_group) ?? parent_group;
             origin = reference_node.origin.slice();
             rotation = reference_node.rotation.slice();
           } else if (parent_group instanceof Group) {
-            let parent_geo_origin = parent_group.children.find((cube) => cube instanceof Cube)?.origin ?? parent_group.origin;
+            let parent_geo_origin = getMainShape(parent_group)?.origin ?? parent_group.origin;
             if (parent_geo_origin) {
               origin.V3_add(parent_geo_origin);
               if (parent_offset) origin.V3_add(parent_offset);
@@ -722,7 +733,6 @@
   // src/formats.ts
   var FORMAT_IDS = [
     "hytale_character",
-    "hytale_attachment",
     "hytale_prop"
   ];
   function setupFormats() {
@@ -758,6 +768,7 @@
         { type: "h3", text: tl("mode.start.format.informations") },
         {
           text: `* One texture can be applied to a model at a time
+                    * UV sizes are linked to the size of each cube and cannot be modified, except by stretching the cube
                     * Models can have a maximum of 255 nodes`.replace(/(\t| {4,4})+/g, "")
         },
         { type: "h3", text: tl("mode.start.format.resources") },
@@ -771,15 +782,7 @@
     };
     let format_character = new ModelFormat("hytale_character", {
       name: "Hytale Character",
-      description: "Create character models using Hytale's blockymodel format",
-      icon: "icon-format_hytale",
-      format_page,
-      block_size: 64,
-      ...common
-    });
-    let format_attachment = new ModelFormat("hytale_attachment", {
-      name: "Hytale Attachment",
-      description: "Create attachments using Hytale's blockymodel format",
+      description: "Create character and attachment models using Hytale's blockymodel format",
       icon: "icon-format_hytale",
       format_page,
       block_size: 64,
@@ -795,7 +798,6 @@
     });
     codec.format = format_character;
     track(format_character);
-    track(format_attachment);
     track(format_prop);
     Language.addTranslations("en", {
       "format_category.hytale": "Hytale"
@@ -1089,7 +1091,7 @@
     let original_save = Animation2.prototype.save;
     Animation2.prototype.save = function(...args) {
       if (!FORMAT_IDS.includes(Format.id)) {
-        return original_save(...args);
+        return original_save.call(this, ...args);
       }
       let animation;
       animation = Animation2.selected;
@@ -1222,7 +1224,8 @@
     }
     let originalGetTexture = CubeFace.prototype.getTexture;
     CubeFace.prototype.getTexture = function(...args) {
-      if (Format.id == "hytale_character") {
+      if (isHytaleFormat()) {
+        if (this.texture == null) return null;
         let collection = getCollection(this.cube);
         if (collection && "texture" in collection && collection.texture) {
           let texture = Texture.all.find((t) => t.uuid == collection.texture);
@@ -1364,7 +1367,7 @@
     BoneAnimator.prototype.displayScale = function displayScale(array, multiplier = 1) {
       if (!array) return this;
       if (isHytaleFormat()) {
-        let target_shape = this.group.children.find((c) => c instanceof Cube);
+        let target_shape = getMainShape(this.group);
         if (target_shape) {
           let initial_stretch = target_shape.stretch.slice();
           target_shape.stretch.V3_set([
@@ -1541,11 +1544,156 @@
         }
       }
     });
+    let originalAutoUV = Cube.prototype.mapAutoUV;
+    Cube.prototype.mapAutoUV = function(options = {}) {
+      if (this.box_uv) return;
+      var scope = this;
+      if (scope.autouv === 2) {
+        var all_faces = ["north", "south", "west", "east", "up", "down"];
+        let offset = Format.centered_grid ? 8 : 0;
+        all_faces.forEach(function(side) {
+          var uv = scope.faces[side].uv.slice();
+          let texture = scope.faces[side].getTexture();
+          let uv_width = Project.getUVWidth(texture);
+          let uv_height = Project.getUVWidth(texture);
+          switch (side) {
+            case "north":
+              uv = [
+                uv_width - (scope.to[0] + offset),
+                uv_height - scope.to[1],
+                uv_width - (scope.from[0] + offset),
+                uv_height - scope.from[1]
+              ];
+              break;
+            case "south":
+              uv = [
+                scope.from[0] + offset,
+                uv_height - scope.to[1],
+                scope.to[0] + offset,
+                uv_height - scope.from[1]
+              ];
+              break;
+            case "west":
+              uv = [
+                scope.from[2] + offset,
+                uv_height - scope.to[1],
+                scope.to[2] + offset,
+                uv_height - scope.from[1]
+              ];
+              break;
+            case "east":
+              uv = [
+                uv_width - (scope.to[2] + offset),
+                uv_height - scope.to[1],
+                uv_width - (scope.from[2] + offset),
+                uv_height - scope.from[1]
+              ];
+              break;
+            case "up":
+              uv = [
+                scope.from[0] + offset,
+                scope.from[2] + offset,
+                scope.to[0] + offset,
+                scope.to[2] + offset
+              ];
+              break;
+            case "down":
+              uv = [
+                scope.from[0] + offset,
+                uv_height - (scope.to[2] + offset),
+                scope.to[0] + offset,
+                uv_height - (scope.from[2] + offset)
+              ];
+              break;
+          }
+          if (Math.max(uv[0], uv[2]) > uv_width) {
+            let offset2 = Math.max(uv[0], uv[2]) - uv_width;
+            uv[0] -= offset2;
+            uv[2] -= offset2;
+          }
+          if (Math.min(uv[0], uv[2]) < 0) {
+            let offset2 = Math.min(uv[0], uv[2]);
+            uv[0] = Math.clamp(uv[0] - offset2, 0, uv_width);
+            uv[2] = Math.clamp(uv[2] - offset2, 0, uv_width);
+          }
+          if (Math.max(uv[1], uv[3]) > uv_height) {
+            let offset2 = Math.max(uv[1], uv[3]) - uv_height;
+            uv[1] -= offset2;
+            uv[3] -= offset2;
+          }
+          if (Math.min(uv[1], uv[3]) < 0) {
+            let offset2 = Math.min(uv[1], uv[3]);
+            uv[1] = Math.clamp(uv[1] - offset2, 0, uv_height);
+            uv[3] = Math.clamp(uv[3] - offset2, 0, uv_height);
+          }
+          scope.faces[side].uv = uv;
+        });
+        scope.preview_controller.updateUV(scope);
+      } else if (scope.autouv === 1) {
+        let calcAutoUV = function(fkey, dimension_axes, world_directions) {
+          let size = dimension_axes.map((axis) => scope.size(axis));
+          let face = scope.faces[fkey];
+          size[0] = Math.abs(size[0]);
+          size[1] = Math.abs(size[1]);
+          let sx = face.uv[0];
+          let sy = face.uv[1];
+          let previous_size = face.uv_size;
+          let rot = face.rotation;
+          let texture = face.getTexture();
+          let uv_width = Project.getUVWidth(texture);
+          let uv_height = Project.getUVHeight(texture);
+          if (rot === 90 || rot === 270) {
+            size.reverse();
+            dimension_axes.reverse();
+            world_directions.reverse();
+          }
+          if (rot == 180) {
+            world_directions[0] *= -1;
+            world_directions[1] *= -1;
+          }
+          size[0] = Math.clamp(size[0], -uv_width, uv_width) * (Math.sign(previous_size[0]) || 1);
+          size[1] = Math.clamp(size[1], -uv_height, uv_height) * (Math.sign(previous_size[1]) || 1);
+          if (options && typeof options.axis == "number") {
+            if (options.axis == dimension_axes[0] && options.direction == world_directions[0]) {
+              sx += previous_size[0] - size[0];
+            }
+            if (options.axis == dimension_axes[1] && options.direction == world_directions[1]) {
+              sy += previous_size[1] - size[1];
+            }
+          }
+          if (sx < 0) sx = 0;
+          if (sy < 0) sy = 0;
+          let endx = sx + size[0];
+          let endy = sy + size[1];
+          if (endx > uv_width) {
+            sx = uv_width - (endx - sx);
+            endx = uv_width;
+          }
+          if (endy > uv_height) {
+            sy = uv_height - (endy - sy);
+            endy = uv_height;
+          }
+          return [sx, sy, endx, endy];
+        };
+        scope.faces.north.uv = calcAutoUV("north", [0, 1], [1, 1]);
+        scope.faces.east.uv = calcAutoUV("east", [2, 1], [1, 1]);
+        scope.faces.south.uv = calcAutoUV("south", [0, 1], [-1, 1]);
+        scope.faces.west.uv = calcAutoUV("west", [2, 1], [-1, 1]);
+        scope.faces.up.uv = calcAutoUV("up", [0, 2], [-1, -1]);
+        scope.faces.down.uv = calcAutoUV("down", [0, 2], [-1, 1]);
+        scope.preview_controller.updateUV(scope);
+      }
+    };
+    track({
+      delete() {
+        Cube.prototype.mapAutoUV = originalAutoUV;
+      }
+    });
   }
 
   // src/uv_cycling.ts
   var cycleState = null;
-  var CLICK_THRESHOLD = 5;
+  var CLICK_THRESHOLD = 0;
   function screenToUV(event) {
     return UVEditor.getBrushCoordinates(event, UVEditor.texture);
   }
@@ -1613,7 +1761,7 @@
       function handleMouseUp(event) {
         if (!pendingClick) return;
         if (event.button !== 0) return;
-        const uvPos = pendingClick.uvPos;
+        const uvPos = screenToUV(event);
         pendingClick = null;
         const isSamePosition = cycleState !== null && Math.abs(uvPos.x - cycleState.lastClickX) <= CLICK_THRESHOLD && Math.abs(uvPos.y - cycleState.lastClickY) <= CLICK_THRESHOLD;
         if (isSamePosition && cycleState) {
@@ -1667,11 +1815,11 @@
       if (group.export == false) return;
       if (Collection.all.find((c) => c.contains(group))) continue;
       node_count++;
-      let cube_count = 0;
+      let main_shape = getMainShape(group);
       for (let cube of group.children) {
         if (cube instanceof Cube == false || cube.export == false) continue;
-        cube_count++;
-        if (cube_count > 1) node_count++;
+        if (cube == main_shape) continue;
+        node_count++;
       }
     }
     return node_count;
@@ -1701,7 +1849,7 @@
   // package.json
   var package_default = {
     name: "hytale-blockbench-plugin",
-    version: "0.3.0",
+    version: "0.3.2",
     description: "Create models and animations for Hytale",
     main: "src/plugin.ts",
     type: "module",
@@ -1963,6 +2111,174 @@
       Canvas.pivot_marker.add(...this.original_helpers);
     }
   };
+  var GroupPivotIndicator = class {
+    dot;
+    listener;
+    cameraListener;
+    setting;
+    constructor() {
+      this.setting = new Setting("show_group_pivot_indicator", {
+        name: "Show Group Pivot Indicator",
+        description: "Show a dot in Edit mode indicating the rotation pivot point for animations",
+        category: "preview",
+        type: "toggle",
+        value: true
+      });
+      let geometry = new THREE.SphereGeometry(0.65, 12, 12);
+      let material = new THREE.MeshBasicMaterial({
+        color: this.getAccentColor(),
+        transparent: true,
+        opacity: 0.9,
+        depthTest: false
+      });
+      this.dot = new THREE.Mesh(geometry, material);
+      this.dot.renderOrder = 900;
+      this.dot.visible = false;
+      Canvas.scene.add(this.dot);
+      this.listener = Blockbench.on("update_selection", () => this.update());
+      this.cameraListener = Blockbench.on("update_camera_position", () => this.updateScale());
+      this.update();
+    }
+    updateScale() {
+      if (!this.dot.visible) return;
+      let scale = Preview.selected.calculateControlScale(this.dot.position) || 0.8;
+      this.dot.scale.setScalar(scale * 0.7);
+    }
+    getAccentColor() {
+      let cssColor = getComputedStyle(document.body).getPropertyValue("--color-accent").trim();
+      return new THREE.Color(cssColor || "#3e90ff");
+    }
+    update() {
+      if (!this.setting.value) {
+        this.dot.visible = false;
+        return;
+      }
+      let group = this.getRelevantGroup();
+      if (!group) {
+        this.dot.visible = false;
+        return;
+      }
+      this.dot.material.color.copy(this.getAccentColor());
+      let mesh = group.mesh;
+      if (mesh) {
+        let worldPos = new THREE.Vector3();
+        mesh.getWorldPosition(worldPos);
+        this.dot.position.copy(worldPos);
+        this.dot.visible = true;
+        this.updateScale();
+      } else {
+        this.dot.visible = false;
+      }
+    }
+    getRelevantGroup() {
+      let sel = Outliner.selected[0];
+      if (!sel) return null;
+      if (sel instanceof Group) {
+        return sel;
+      }
+      if (sel.parent instanceof Group) {
+        return sel.parent;
+      }
+      return null;
+    }
+    delete() {
+      Canvas.scene.remove(this.dot);
+      this.dot.geometry.dispose();
+      this.dot.material.dispose();
+      this.listener.delete();
+      this.cameraListener.delete();
+      this.setting.delete();
+    }
+  };
+
+  // src/uv_outline.ts
+  var UV_OUTLINE_CSS = `
+body.hytale-format #uv_frame .uv_resize_corner,
+body.hytale-format #uv_frame .uv_resize_side,
+body.hytale-format #uv_frame #uv_scale_handle,
+body.hytale-format #uv_frame #uv_selection_frame {
+    display: none;
+}
+
+body.hytale-format #uv_frame.overlay_mode {
+    --uv-line-width: 2px;
+}
+body.hytale-format #uv_frame.overlay_mode .cube_uv_face {
+    border-color: transparent !important;
+}
+body.hytale-format #uv_frame.overlay_mode .cube_uv_face::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
+    border: 1px solid var(--color-text);
+    pointer-events: none;
+}
+body.hytale-format #uv_frame.overlay_mode .cube_uv_face.selected:not(.unselected) {
+    outline: none;
+}
+
+body.hytale-uv-outline-only #uv_frame {
+    --color-uv-background: transparent;
+    --color-uv-background-hover: transparent;
+}
+body.hytale-uv-outline-only #uv_frame .cube_uv_face {
+    border-color: transparent !important;
+}
+body.hytale-uv-outline-only #uv_frame .cube_uv_face::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
+    border: 1px solid var(--color-text);
+    pointer-events: none;
+}
+body.hytale-uv-outline-only #uv_frame .cube_uv_face:hover::before {
+    border-color: var(--color-accent);
+}
+body.hytale-uv-outline-only #uv_frame:not(.overlay_mode) .cube_uv_face.selected:not(.unselected)::before {
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    border-width: 2px;
+    border-color: var(--color-accent);
+}
+body.hytale-uv-outline-only #uv_frame .mesh_uv_face polygon {
+    stroke-width: 1px;
+}
+body.hytale-uv-outline-only #uv_frame:not(.overlay_mode) .mesh_uv_face.selected polygon {
+    stroke-width: 2px;
+}
+body.hytale-uv-outline-only #uv_frame .selection_rectangle {
+    background-color: transparent;
+}
+`;
+  function updateHytaleFormatClass() {
+    document.body.classList.toggle("hytale-format", isHytaleFormat());
+  }
+  function setupUVOutline() {
+    const style = Blockbench.addCSS(UV_OUTLINE_CSS);
+    track(style);
+    const setting = new Setting("uv_outline_only", {
+      name: "UV Outline Only",
+      description: "Show only outlines for UV faces instead of filled overlays",
+      category: "edit",
+      value: true,
+      onChange(value) {
+        document.body.classList.toggle("hytale-uv-outline-only", value);
+      }
+    });
+    track(setting);
+    const selectProjectListener = Blockbench.on("select_project", updateHytaleFormatClass);
+    track(selectProjectListener);
+    document.body.classList.toggle("hytale-uv-outline-only", settings.uv_outline_only?.value ?? true);
+    updateHytaleFormatClass();
+  }
 
   // src/plugin.ts
   BBPlugin.register("hytale_plugin", {
@@ -1989,8 +2305,39 @@
       setupUVCycling();
       setupTextureHandling();
       setupNameOverlap();
+      setupUVOutline();
+      let panel_setup_listener;
+      function showCollectionPanel() {
+        const local_storage_key = "hytale_plugin:collection_panel_setup";
+        if (localStorage.getItem(local_storage_key)) return true;
+        if (!Modes.edit) return false;
+        if (Panels.collections.slot == "hidden") {
+          Panels.collections.moveTo("right_bar");
+        }
+        if (Panels.collections.folded) {
+          Panels.collections.fold();
+        }
+        if (panel_setup_listener) {
+          panel_setup_listener.delete();
+          panel_setup_listener = void 0;
+        }
+        localStorage.setItem(local_storage_key, "true");
+        return true;
+      }
+      if (!showCollectionPanel()) {
+        panel_setup_listener = Blockbench.on("select_mode", showCollectionPanel);
+      }
+      let on_finish_edit = Blockbench.on("generate_texture_template", (arg) => {
+        for (let element of arg.elements) {
+          if (typeof element.autouv != "number") continue;
+          element.autouv = 1;
+        }
+      });
+      track(on_finish_edit);
       let pivot_marker = new CustomPivotMarker();
       track(pivot_marker);
+      let group_pivot_indicator = new GroupPivotIndicator();
+      track(group_pivot_indicator);
     },
     onunload() {
       cleanup();
