@@ -1488,7 +1488,7 @@
 
   // src/uv_cycling.ts
   var cycleState = null;
-  var CLICK_THRESHOLD = 5;
+  var CLICK_THRESHOLD = 0;
   function screenToUV(event) {
     return UVEditor.getBrushCoordinates(event, UVEditor.texture);
   }
@@ -1556,7 +1556,7 @@
       function handleMouseUp(event) {
         if (!pendingClick) return;
         if (event.button !== 0) return;
-        const uvPos = pendingClick.uvPos;
+        const uvPos = screenToUV(event);
         pendingClick = null;
         const isSamePosition = cycleState !== null && Math.abs(uvPos.x - cycleState.lastClickX) <= CLICK_THRESHOLD && Math.abs(uvPos.y - cycleState.lastClickY) <= CLICK_THRESHOLD;
         if (isSamePosition && cycleState) {
