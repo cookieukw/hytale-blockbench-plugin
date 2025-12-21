@@ -1,6 +1,6 @@
 name: Suggestion
 description: Use this form to suggest features or improvements for the Hytale Blockbench plugin.
-title: ""
+title: "Suggestion Summary"
 body:
 - type: markdown
   attributes:

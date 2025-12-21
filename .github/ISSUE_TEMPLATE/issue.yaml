@@ -1,6 +1,6 @@
 name: Bug / Issue
 description: Use this form to report an issue that occurs when using the Hytale Blockbench plugin.
-title: ""
+title: "Issue Summary"
 body:
 - type: markdown
   attributes:
