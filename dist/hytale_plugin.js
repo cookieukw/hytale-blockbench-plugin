@@ -955,9 +955,6 @@
         let content = Codecs.blockymodel.parse(json, file.path, { attachment: collection.name });
         let new_groups = content.new_groups;
         let root_groups = new_groups.filter((group) => !new_groups.includes(group.parent));
-        for (let tex of content.new_textures) {
-          tex.remove();
-        }
         collection.extend({
           children: root_groups.map((g) => g.uuid)
         }).add();

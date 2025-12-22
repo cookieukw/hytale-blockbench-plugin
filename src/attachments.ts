@@ -137,10 +137,6 @@ export function setupAttachments() {
 			let new_groups = content.new_groups as Group[];
 			let root_groups = new_groups.filter(group => !new_groups.includes(group.parent as Group));
 
-			for (let tex of content.new_textures as Texture[]) {
-				tex.remove();
-			}
-
 			collection.extend({
 				children: root_groups.map(g => g.uuid),
 			}).add();
