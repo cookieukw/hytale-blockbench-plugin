@@ -27,15 +27,6 @@ export function processAttachmentTextures(attachmentName: string, newTextures: T
 	return texture.uuid;
 }
 
-export function clearAttachmentTextures(collectionName: string): void {
-	let textureGroup = TextureGroup.all.find(tg => tg.name === collectionName);
-	if (textureGroup) {
-		for (let texture of [...Texture.all.filter(t => t.group === textureGroup.uuid)]) {
-			texture.remove();
-		}
-		textureGroup.remove();
-	}
-}
 
 export function setupAttachmentTextures() {
 	let textureProperty = new Property(Collection, 'string', 'texture', {
