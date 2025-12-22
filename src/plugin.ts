@@ -13,6 +13,7 @@ import { CustomPivotMarker, GroupPivotIndicator } from "./pivot_marker"
 import { setupTextureHandling } from "./texture";
 import { setupNameOverlap } from "./name_overlap";
 import { setupUVOutline } from "./uv_outline";
+import { setupTempFixes } from './temp_fixes'
 
 BBPlugin.register('hytale_plugin', {
     title: 'Hytale Models',
@@ -40,6 +41,7 @@ BBPlugin.register('hytale_plugin', {
         setupTextureHandling();
         setupNameOverlap();
         setupUVOutline();
+        setupTempFixes();
 
         // Collections panel setting
         let panel_setup_listener: Deletable;
