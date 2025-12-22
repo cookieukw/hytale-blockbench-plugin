@@ -36,7 +36,8 @@
     menu: () => menu,
     plugin: () => plugin,
     settings: () => settings2,
-    textures: () => textures
+    textures: () => textures,
+    toggle: () => toggle
   });
   var plugin = {
     title: "Hytale Models",
@@ -105,6 +106,9 @@
       description: "When selecting a texture in a Hytale format, preview the texture on the model instantly"
     }
   };
+  var toggle = {
+    toggle_attachment_editing: "Toggle Attachment Editing"
+  };
   var en_default = {
     plugin,
     menu,
@@ -113,7 +117,8 @@
     textures,
     directory,
     formats,
-    settings: settings2
+    settings: settings2,
+    toggle
   };
 
   // src/translations/pt-BR.json
@@ -127,7 +132,8 @@
     menu: () => menu2,
     plugin: () => plugin2,
     settings: () => settings3,
-    textures: () => textures2
+    textures: () => textures2,
+    toggle: () => toggle2
   });
   var plugin2 = {
     title: "Modelos Hytale",
@@ -196,6 +202,9 @@
       description: "Ao selecionar uma textura em um formato Hytale, a textura \xE9 exibida instantaneamente no modelo"
     }
   };
+  var toggle2 = {
+    toggle_attachment_editing: "Alternar Edi\xE7\xE3o de Anexos"
+  };
   var pt_BR_default = {
     plugin: plugin2,
     menu: menu2,
@@ -204,7 +213,8 @@
     textures: textures2,
     directory: directory2,
     formats: formats2,
-    settings: settings3
+    settings: settings3,
+    toggle: toggle2
   };
 
   // src/i18n.ts
@@ -2496,7 +2506,7 @@
 	`);
     StateMemory.init("hytale_attachments_hidden", "boolean");
     attachmentsHidden = StateMemory.get("hytale_attachments_hidden") ?? false;
-    let toggle = new Toggle("toggle_attachment_editing", {
+    let toggle3 = new Toggle("toggle_attachment_editing", {
       name: "Toggle Attachment Editing",
       description: "Lock or unlock attachment elements for editing",
       icon: "fa-paperclip",
@@ -2511,7 +2521,7 @@
     });
     let outlinerPanel = Panels.outliner;
     if (outlinerPanel && outlinerPanel.toolbars.length > 0) {
-      outlinerPanel.toolbars[0].add(toggle, -1);
+      outlinerPanel.toolbars[0].add(toggle3, -1);
     }
     let hookFinishedEdit = Blockbench.on("finished_edit", scheduleVisibilityUpdate);
     let hookSelectMode = Blockbench.on("select_mode", scheduleVisibilityUpdate);
@@ -2519,7 +2529,7 @@
     if (attachmentsHidden) {
       setTimeout(applyOutlinerVisibility, 100);
     }
-    track(toggle, hookFinishedEdit, hookSelectMode, hookSelection, style, {
+    track(toggle3, hookFinishedEdit, hookSelectMode, hookSelection, style, {
       delete() {
         Panels.outliner?.node?.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => {
           el.classList.remove(HIDDEN_CLASS);
