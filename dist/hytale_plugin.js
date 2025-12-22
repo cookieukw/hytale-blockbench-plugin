@@ -1874,6 +1874,15 @@
   // src/outliner_filter.ts
   var HIDDEN_CLASS = "hytale_attachment_hidden";
   var attachmentsHidden = false;
+  var visibilityUpdatePending = false;
+  function scheduleVisibilityUpdate() {
+    if (!attachmentsHidden || visibilityUpdatePending) return;
+    visibilityUpdatePending = true;
+    requestAnimationFrame(() => {
+      visibilityUpdatePending = false;
+      applyOutlinerVisibility();
+    });
+  }
   function getAttachmentUUIDs() {
     let uuids = [];
     if (!Collection.all?.length) return uuids;
@@ -1959,21 +1968,9 @@
     if (outlinerPanel && outlinerPanel.toolbars.length > 0) {
       outlinerPanel.toolbars[0].add(toggle, -1);
     }
-    let hookFinishedEdit = Blockbench.on("finished_edit", () => {
-      if (attachmentsHidden) {
-        setTimeout(applyOutlinerVisibility, 10);
-      }
-    });
-    let hookSelectMode = Blockbench.on("select_mode", () => {
-      if (attachmentsHidden) {
-        setTimeout(applyOutlinerVisibility, 50);
-      }
-    });
-    let hookSelection = Blockbench.on("update_selection", () => {
-      if (attachmentsHidden) {
-        setTimeout(applyOutlinerVisibility, 10);
-      }
-    });
+    let hookFinishedEdit = Blockbench.on("finished_edit", scheduleVisibilityUpdate);
+    let hookSelectMode = Blockbench.on("select_mode", scheduleVisibilityUpdate);
+    let hookSelection = Blockbench.on("update_selection", scheduleVisibilityUpdate);
     if (attachmentsHidden) {
       setTimeout(applyOutlinerVisibility, 100);
     }

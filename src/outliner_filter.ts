@@ -8,6 +8,16 @@ import { FORMAT_IDS, isHytaleFormat } from "./formats";
 
 const HIDDEN_CLASS = 'hytale_attachment_hidden';
 let attachmentsHidden = false;
+let visibilityUpdatePending = false;
+
+function scheduleVisibilityUpdate() {
+	if (!attachmentsHidden || visibilityUpdatePending) return;
+	visibilityUpdatePending = true;
+	requestAnimationFrame(() => {
+		visibilityUpdatePending = false;
+		applyOutlinerVisibility();
+	});
+}
 
 /**
  * Get all UUIDs of elements belonging to any collection (attachments)
@@ -140,24 +150,10 @@ export function setupOutlinerFilter() {
 		outlinerPanel.toolbars[0].add(toggle, -1);
 	}
 
-	// Refresh visibility when outliner updates
-	let hookFinishedEdit = Blockbench.on('finished_edit', () => {
-		if (attachmentsHidden) {
-			setTimeout(applyOutlinerVisibility, 10);
-		}
-	});
-
-	let hookSelectMode = Blockbench.on('select_mode', () => {
-		if (attachmentsHidden) {
-			setTimeout(applyOutlinerVisibility, 50);
-		}
-	});
-
-	let hookSelection = Blockbench.on('update_selection', () => {
-		if (attachmentsHidden) {
-			setTimeout(applyOutlinerVisibility, 10);
-		}
-	});
+	// Refresh visibility when outliner updates (debounced to next frame)
+	let hookFinishedEdit = Blockbench.on('finished_edit', scheduleVisibilityUpdate);
+	let hookSelectMode = Blockbench.on('select_mode', scheduleVisibilityUpdate);
+	let hookSelection = Blockbench.on('update_selection', scheduleVisibilityUpdate);
 
 	// Initial application
 	if (attachmentsHidden) {
