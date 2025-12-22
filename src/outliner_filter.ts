@@ -109,15 +109,11 @@ export function setAttachmentsOutlinerVisibility(hidden: boolean) {
 }
 
 export function setupOutlinerFilter() {
-	// Inject CSS for hiding outliner nodes
-	let style = document.createElement('style');
-	style.id = 'hytale-outliner-filter-styles';
-	style.textContent = `
+	let style = Blockbench.addCSS(`
 		.outliner_node.${HIDDEN_CLASS} {
 			display: none !important;
 		}
-	`;
-	document.head.appendChild(style);
+	`);
 
 	// Initialize state from StateMemory
 	StateMemory.init('hytale_attachments_hidden', 'boolean');
@@ -168,9 +164,8 @@ export function setupOutlinerFilter() {
 		setTimeout(applyOutlinerVisibility, 100);
 	}
 
-	track(toggle, hookFinishedEdit, hookSelectMode, hookSelection, {
+	track(toggle, hookFinishedEdit, hookSelectMode, hookSelection, style, {
 		delete() {
-			style.remove();
 			Panels.outliner?.node?.querySelectorAll(`.${HIDDEN_CLASS}`).forEach(el => {
 				el.classList.remove(HIDDEN_CLASS);
 			});

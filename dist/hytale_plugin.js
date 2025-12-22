@@ -1935,14 +1935,11 @@
     }
   }
   function setupOutlinerFilter() {
-    let style = document.createElement("style");
-    style.id = "hytale-outliner-filter-styles";
-    style.textContent = `
+    let style = Blockbench.addCSS(`
 		.outliner_node.${HIDDEN_CLASS} {
 			display: none !important;
 		}
-	`;
-    document.head.appendChild(style);
+	`);
     StateMemory.init("hytale_attachments_hidden", "boolean");
     attachmentsHidden = StateMemory.get("hytale_attachments_hidden") ?? false;
     let toggle = new Toggle("toggle_attachments_in_outliner", {
@@ -1980,9 +1977,8 @@
     if (attachmentsHidden) {
       setTimeout(applyOutlinerVisibility, 100);
     }
-    track(toggle, hookFinishedEdit, hookSelectMode, hookSelection, {
+    track(toggle, hookFinishedEdit, hookSelectMode, hookSelection, style, {
       delete() {
-        style.remove();
         Panels.outliner?.node?.querySelectorAll(`.${HIDDEN_CLASS}`).forEach((el) => {
           el.classList.remove(HIDDEN_CLASS);
         });
