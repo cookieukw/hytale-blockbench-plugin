@@ -1,0 +1,24 @@
+{
+  "plugin": {
+    "title": "Modelos Hytale",
+    "description": "Criar modelos e animações para Hytale"
+  },
+  "menu": {
+    "import_attachment": "Importar Anexo",
+    "reload_all": "Recarregar Todos os Anexos"
+  },
+  "error": {
+    "no_textures": "Nenhuma textura encontrada para este modelo."
+  },
+  "actions": {
+    "reload_attachments": "Recarregar Anexos",
+    "reload_all_attachments": "Recarregar Todos os Anexos"
+  },
+  "textures":{
+    "import": "Importar Texturas",
+    "message":"Nenhuma textura foi encontrada para este modelo. Como você gostaria de importar texturas?",
+    "select_files": "Selecionar Arquivos",
+    "select_folder": "Selecionar Pasta",
+    "skip": "Pular"
+  }
+}

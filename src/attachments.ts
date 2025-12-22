@@ -9,6 +9,7 @@ import {
 	setupAttachmentTextures,
 	processAttachmentTextures,
 } from "./attachment_texture";
+import { t } from "./i18n";
 
 export { AttachmentCollection } from "./attachment_texture";
 export let reload_all_attachments: Action;
@@ -149,7 +150,7 @@ export function setupAttachments() {
 	}
 
 	let reload_attachment_action = new Action('reload_hytale_attachment', {
-		name: 'Reload Attachment',
+		name: t('actions.reload_attachments'),
 		icon: 'refresh',
 		condition: () => Collection.selected.length && Modes.edit,
 		click() {
@@ -162,7 +163,7 @@ export function setupAttachments() {
 	track(reload_attachment_action);
 
 	reload_all_attachments = new Action('reload_all_hytale_attachments', {
-		name: 'Reload All Attachments',
+		name: t('actions.reload_all_attachments'),
 		icon: 'sync',
 		condition: {formats: FORMAT_IDS},
 		click() {
