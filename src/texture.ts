@@ -23,12 +23,13 @@ export function setupTextureHandling() {
     })
     track(setting);
 
+    // Auto-set selected texture: for grouped textures update the collection, otherwise set as default
     let handler = Blockbench.on('select_texture', (arg) => {
         if (!isHytaleFormat()) return;
         if (setting.value == false) return;
 
         let texture = arg.texture as Texture;
-        // @ts-ignore
+        // @ts-expect-error - getGroup not in types
         let texture_group = texture.getGroup() as TextureGroup;
         if (texture_group) {
             let collection = Collection.all.find(c => c.name == texture_group.name) as AttachmentCollection;
