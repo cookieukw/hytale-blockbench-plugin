@@ -10,7 +10,7 @@ import { setupUVCycling } from "./uv_cycling";
 import { setupChecks } from "./validation";
 // @ts-expect-error
 import Package from './../package.json'
-import { setupFormats } from "./formats";
+import { FORMAT_IDS, setupFormats } from "./formats";
 import { setupPhotoshopTools } from "./photoshop_copy_paste";
 import { CustomPivotMarker, GroupPivotIndicator } from "./pivot_marker"
 import { setupOutlinerFilter } from "./outliner_filter";
@@ -31,6 +31,9 @@ BBPlugin.register('hytale_plugin', {
     await_loading: true,
     has_changelog: true,
 	creation_date: "2025-12-22",
+    contributes: {
+        formats: FORMAT_IDS
+    },
     repository: 'https://github.com/JannisX11/hytale-blockbench-plugin',
     bug_tracker: 'https://github.com/JannisX11/hytale-blockbench-plugin/issues',
     onload() {
