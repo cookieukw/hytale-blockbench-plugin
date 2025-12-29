@@ -1634,19 +1634,35 @@
     track(add_quad_action);
     let add_element_menu = BarItems.add_element.side_menu;
     add_element_menu.addAction(add_quad_action);
+    let inflate_condition_original = BarItems.slider_inflate.condition;
+    BarItems.slider_inflate.condition = () => {
+      if (isHytaleFormat()) return false;
+      return Condition(inflate_condition_original);
+    };
+    track({
+      delete() {
+        BarItems.slider_inflate.condition = inflate_condition_original;
+      }
+    });
     Blockbench.on("finish_edit", (arg) => {
       if (!FORMAT_IDS.includes(Format.id)) return;
       if (arg.aspects?.elements) {
-        let changes = false;
+        let uv_changes = false;
         for (let element of arg.aspects.elements) {
           if (element instanceof Cube == false) continue;
-          if (element.autouv) continue;
-          element.autouv = 1;
-          element.mapAutoUV();
-          element.preview_controller.updateUV(element);
-          changes = true;
+          if (!element.autouv) {
+            element.autouv = 1;
+            element.mapAutoUV();
+            element.preview_controller.updateUV(element);
+            uv_changes = true;
+          }
+          if (element.inflate) {
+            element.inflate = 0;
+            element.preview_controller.updateGeometry(element);
+            TickUpdates.selection = true;
+          }
         }
-        if (changes) {
+        if (uv_changes) {
           UVEditor.vue.$forceUpdate();
         }
       }

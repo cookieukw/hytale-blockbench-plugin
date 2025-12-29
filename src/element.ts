@@ -2,8 +2,7 @@
 //! Licensed under the GNU General Public License, see LICENSE.MD
 
 import { track } from "./cleanup";
-import { Config } from "./config";
-import { FORMAT_IDS } from "./formats";
+import { FORMAT_IDS, isHytaleFormat } from "./formats";
 
 // TODO(Blockbench): Resizing a stretched cube causes it to drift. The gizmo's move_value
 // is in rendered space (stretch applied) but resize() applies it directly to from/to.
@@ -206,21 +205,40 @@ export function setupElements() {
 	let add_element_menu = ((BarItems.add_element as Action).side_menu as Menu);
 	add_element_menu.addAction(add_quad_action);
 
-	// UV workflow
+	// Inflate
+	let inflate_condition_original = BarItems.slider_inflate.condition;
+	BarItems.slider_inflate.condition = () => {
+		if (isHytaleFormat()) return false;
+		return Condition(inflate_condition_original);
+	}
+	track({
+		delete() {
+			BarItems.slider_inflate.condition = inflate_condition_original;
+		}
+	});
+
+	// UV workflow and inflate fallback
 	Blockbench.on('finish_edit', (arg: {aspects: UndoAspects}) => {
         if (!FORMAT_IDS.includes(Format.id)) return;
 		if (arg.aspects?.elements) {
-			let changes = false;
+			let uv_changes = false;
 			for (let element of arg.aspects.elements) {
 				if (element instanceof Cube == false) continue;
-				if (element.autouv) continue;
 
-				element.autouv = 1;
-				element.mapAutoUV();
-				element.preview_controller.updateUV(element);
-				changes = true;
+				if (!element.autouv) {
+					element.autouv = 1;
+					element.mapAutoUV();
+					element.preview_controller.updateUV(element);
+					uv_changes = true;
+				}
+				if (element.inflate) {
+					// Set inflate to 0 in case a value is set for unknown reasons
+					element.inflate = 0;
+					element.preview_controller.updateGeometry(element);
+					TickUpdates.selection = true;
+				}
 			}
-			if (changes) {
+			if (uv_changes) {
 				UVEditor.vue.$forceUpdate();
 			}
 		}
