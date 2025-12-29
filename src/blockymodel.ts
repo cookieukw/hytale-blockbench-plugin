@@ -469,12 +469,12 @@ export function setupBlockymodelCodec(): Codec {
 
 				return node;
 			}
-			let groups = Outliner.root.filter(g => g instanceof Group);
+			let nodes: (Group | Cube)[] = Outliner.root.filter(node => node instanceof Group || node instanceof Cube);
 			if (options.attachment instanceof Collection) {
-				groups = (options.attachment as Collection).getChildren().filter(g => g instanceof Group);
+				nodes = (options.attachment as Collection).getChildren().filter(g => g instanceof Group);
 			}
-			for (let group of groups) {
-				let compiled = group instanceof Group && compileNode(group);
+			for (let node of nodes) {
+				let compiled = compileNode(node);
 				if (compiled) model.nodes.push(compiled);
 			}
 

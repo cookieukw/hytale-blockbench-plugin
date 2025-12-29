@@ -372,12 +372,12 @@
           }
           return node;
         }
-        let groups = Outliner.root.filter((g) => g instanceof Group);
+        let nodes = Outliner.root.filter((node) => node instanceof Group || node instanceof Cube);
         if (options.attachment instanceof Collection) {
-          groups = options.attachment.getChildren().filter((g) => g instanceof Group);
+          nodes = options.attachment.getChildren().filter((g) => g instanceof Group);
         }
-        for (let group of groups) {
-          let compiled = group instanceof Group && compileNode(group);
+        for (let node of nodes) {
+          let compiled = compileNode(node);
           if (compiled) model.nodes.push(compiled);
         }
         if (options.raw) {
@@ -2569,6 +2569,9 @@ body.hytale-uv-outline-only #uv_frame .selection_rectangle {
     await_loading: true,
     has_changelog: true,
     creation_date: "2025-12-22",
+    contributes: {
+      formats: FORMAT_IDS
+    },
     repository: "https://github.com/JannisX11/hytale-blockbench-plugin",
     bug_tracker: "https://github.com/JannisX11/hytale-blockbench-plugin/issues",
     onload() {
