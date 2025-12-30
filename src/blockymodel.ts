@@ -513,9 +513,9 @@ export function setupBlockymodelCodec(): Codec {
 				let offset = node.shape?.offset ? parseVector(node.shape?.offset) : [0, 0, 0];
 				let origin = parseVector(node.position);
 				let rotation: ArrayVector3 = [
-					Math.radToDeg(rotation_euler.x),
-					Math.radToDeg(rotation_euler.y),
-					Math.radToDeg(rotation_euler.z),
+					Math.roundTo(Math.radToDeg(rotation_euler.x), 3),
+					Math.roundTo(Math.radToDeg(rotation_euler.y), 3),
+					Math.roundTo(Math.radToDeg(rotation_euler.z), 3),
 				];
 				if (args.attachment && !parent_node && parent_group instanceof Group) {
 					let reference_node = getMainShape(parent_group) ?? parent_group;
