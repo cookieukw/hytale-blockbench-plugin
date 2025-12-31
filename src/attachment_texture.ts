@@ -48,6 +48,7 @@ export function setupAttachmentTextures() {
 				}
 				return null;
 			}
+			return Texture.getDefault();
 		}
 		return originalGetTexture.call(this, ...args);
 	};
