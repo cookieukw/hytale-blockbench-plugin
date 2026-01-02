@@ -30,5 +30,5 @@ Select a Hytale format from the start screen and click Create New Model to get s
 ### Guidelines
 * As a size reference, the center grid in a new Hytale project represents one block in-game. This measures either 32 pixels for props and blocks or 64 pixels for characters and attachments.
 * Models should not have more than 255 nodes. Nodes are a concept in the Hytale model format, each group counts as a node, and each cube/quad counts except if it's the first cube in a respective group. The number of nodes can be seen by clicking on the element counter above the outliner.
-* UVs should always the dimensions of their face, deviating sizes will not be included in the exported model.
+* UVs must always match the dimensions of their face, the format does not consider custom UV sizes.
 

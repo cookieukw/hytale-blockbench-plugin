@@ -785,8 +785,8 @@
         { type: "h3", text: tl("mode.start.format.resources") },
         {
           text: [
-            "* [Modeling Tutorial](https://hytale.com/)",
-            "* [Animation Tutorial](https://hytale.com/)"
+            "* [Modeling Overview and Style Guide](https://hytale.com/news/2025/12/an-introduction-to-making-models-for-hytale)",
+            "* [Modeling Tutorial](https://youtu.be/Q07i3wmGy0Y)"
           ].join("\n")
         }
       ]
