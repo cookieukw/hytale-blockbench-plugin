@@ -14,6 +14,7 @@ export function setupPhotoshopTools() {
         name: 'Copy-Paste with Magenta Alpha',
         description: 'Copy image selections with magenta background and remove magenta when pasting to help transfer transparency to Photoshop',
         type: 'toggle',
+        category: 'paint',
         value: false
     })
     track(setting);

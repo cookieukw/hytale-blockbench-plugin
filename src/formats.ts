@@ -26,6 +26,7 @@ export function setupFormats() {
         centered_grid: true,
         box_uv: false,
         optional_box_uv: true,
+        box_uv_float_size: true,
         uv_rotation: true,
         rotate_cubes: true,
         per_texture_uv_size: true,

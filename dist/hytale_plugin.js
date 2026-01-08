@@ -765,6 +765,7 @@
       centered_grid: true,
       box_uv: false,
       optional_box_uv: true,
+      box_uv_float_size: true,
       uv_rotation: true,
       rotate_cubes: true,
       per_texture_uv_size: true,
@@ -906,6 +907,7 @@
     });
     let setting = new Setting("hytale_duplicate_bone_names", {
       name: "Duplicate Bone Names",
+      category: "edit",
       description: "Allow creating duplicate groups names in Hytale formats. Multiple groups with the same name can be used to apply animations to multiple nodes at once.",
       type: "toggle",
       value: false
@@ -1883,6 +1885,7 @@
       name: "Copy-Paste with Magenta Alpha",
       description: "Copy image selections with magenta background and remove magenta when pasting to help transfer transparency to Photoshop",
       type: "toggle",
+      category: "paint",
       value: false
     });
     track(setting);

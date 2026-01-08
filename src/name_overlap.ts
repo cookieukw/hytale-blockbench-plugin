@@ -91,6 +91,7 @@ export function setupNameOverlap() {
 
     let setting = new Setting('hytale_duplicate_bone_names', {
         name: 'Duplicate Bone Names',
+        category: 'edit',
         description: 'Allow creating duplicate groups names in Hytale formats. Multiple groups with the same name can be used to apply animations to multiple nodes at once.',
         type: 'toggle',
         value: false
