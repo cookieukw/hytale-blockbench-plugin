@@ -41,10 +41,10 @@
       "description": "Create prop models using Hytale's blockymodel format"
     },
     "page": {
-      "informations": "Informations",
+      "informations": "Information",
       "resources": "Resources",
       "info_list": "* One texture can be applied to a model at a time\n* UV sizes are linked to the size of each cube and cannot be modified, except by stretching the cube\n* Models can have a maximum of 255 nodes",
-      "resource_list": "* [Modeling Tutorial](https://hytale.com/)\n* [Animation Tutorial](https://hytale.com/)"
+      "resource_list": "* [Modeling Overview and Style Guide](https://hytale.com/news/2025/12/an-introduction-to-making-models-for-hytale)\n* [Modeling Tutorial](https://youtu.be/Q07i3wmGy0Y)"
     },
     "category": "Hytale"
   },

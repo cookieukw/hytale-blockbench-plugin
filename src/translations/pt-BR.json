@@ -44,8 +44,8 @@
     "page": {
       "informations": "Informações",
       "resources": "Recursos",
-      "info_list": "* Apenas uma textura pode ser aplicada ao modelo por vez\n* Os tamanhos de UV são vinculados ao tamanho de cada cubo e não podem ser modificados, exceto esticando o cubo\n* Os modelos podem ter no máximo 255 nós",
-      "resource_list": "* [Tutorial de Modelagem](https://hytale.com/)\n* [Tutorial de Animação](https://hytale.com/)"
+      "info_list": "* Apenas uma textura pode ser aplicada a um modelo por vez\n* Os tamanhos de UV são vinculados ao tamanho de cada cubo e não podem ser modificados, exceto esticando o cubo\n* Os modelos podem ter no máximo 255 nós",
+      "resource_list": "* [Guia de Modelagem e Estilo](https://hytale.com/news/2025/12/an-introduction-to-making-models-for-hytale)\n* [Tutorial de Modelagem](https://youtu.be/Q07i3wmGy0Y)"
     },
     "category": "Hytale"
   },
