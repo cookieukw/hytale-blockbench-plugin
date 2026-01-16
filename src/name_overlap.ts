@@ -91,8 +91,9 @@ export function setupNameOverlap() {
     })
 
     let setting = new Setting("hytale_duplicate_bone_names", {
-      name: t("settings.duplicate_bones.name"), 
-      description: t("settings.duplicate_bones.description"), 
+      name: t("settings.duplicate_bones.name"),
+      category: "edit",
+      description: t("settings.duplicate_bones.description"),
       type: "toggle",
       value: false,
     });
