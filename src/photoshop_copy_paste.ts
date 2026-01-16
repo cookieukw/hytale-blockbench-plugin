@@ -9,6 +9,7 @@ export function setupPhotoshopTools() {
   let setting = new Setting("copy_paste_magenta_alpha", {
     name: t("settings.photoshop_copy.name"),
     description: t("settings.photoshop_copy.description"),
+    category: "paint",
     type: "toggle",
     value: false,
   });
