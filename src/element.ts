@@ -2,9 +2,10 @@
 //! Licensed under the GNU General Public License, see LICENSE.MD
 
 import { track } from "./cleanup";
-import { Config } from "./config";
-import { FORMAT_IDS } from "./formats";
+
 import { t } from "./i18n";
+import { FORMAT_IDS, isHytaleFormat } from "./formats";
+import { cubeIsQuad } from "./util";
 
 // TODO(Blockbench): Resizing a stretched cube causes it to drift. The gizmo's move_value
 // is in rendered space (stretch applied) but resize() applies it directly to from/to.
